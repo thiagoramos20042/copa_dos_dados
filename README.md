@@ -7,7 +7,7 @@ Construir um algortimo de Machine Learning capaz de prever quem vai ganhar a Cop
 Foi disponibilizado conjuntos de dados no formato Excel e nossa tarefa foi construir um Banco de dados no MongoDB para ingestão dos dados e consultas das tabelas para as futuras análises para o projeto. As tabelas que compõem a base de dados são (df_jogoscopasdomundo, df_jogadores_copasdomundo, df_campeoes_copasdomundo)
 
 # Insights da Base de dados
-# 1 - Quem são os maiores vencedores?
+### 1 - Quem são os maiores vencedores?
 2 - Seleções que mais ficaram em segundo lugar na Copa do Mundo?
 3 - Qual foi a média de Público na Copa do Mundo?
 4 - 4 - Média de Gols na Copa do Mundo? 
