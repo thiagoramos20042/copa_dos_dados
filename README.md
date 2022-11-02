@@ -14,3 +14,6 @@ Foi disponibilizado conjuntos de dados no formato Excel e nossa tarefa foi const
 3 - Qual foi a média de Público na Copa do Mundo?
 
 4 - Média de Gols na Copa do Mundo? 
+
+# Deploy do modelo de Machine learning na ferramenta streamlit
+https://thiagoramos20042-copa-dos-dados-copa-dos-dados-pvz399.streamlitapp.com/
