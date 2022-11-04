@@ -122,7 +122,7 @@ def page2():
                  "Côte d'Ivoire": 72, 'rn">Serbia and Montenegro': 73,
                  'Angola': 74, 'Czech Republic': 75, 'Ghana': 76, 'Togo': 77, 'Ukraine': 78, 'Serbia': 79,
                  'Slovakia': 80, 'rn">Bosnia and Herzegovina': 81,
-                 'Iceland': 82, 'Panama': 83}
+                 'Iceland': 82, 'Panama': 83, 'Qatar': 84}
 
     df_campeoes = pd.read_csv("Campeoes.csv")
     campeoes = df_campeoes['Vencedor'].value_counts()
