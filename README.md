@@ -1,19 +1,37 @@
-# Copa dos Dados 2022
-![alt text](https://thiagoramos20042-copa-dos-dados-copa-dos-dados-pvz399.streamlitapp.com/~/+/media/b1daaa75b564927e57fcbf8dc22bf890f9b6918e8810d881677faabf.png)
-# Entendimento do problema
-Construir um algortimo de Machine Learning capaz de prever quem vai ganhar a Copa do Mundo 2022
+# Copa dos Dados 2026
 
-# Coleta dos dados
-Foi disponibilizado conjuntos de dados no formato Excel e nossa tarefa foi construir um Banco de dados no MongoDB para ingestão dos dados e consultas das tabelas para as futuras análises para o projeto. As tabelas que compõem a base de dados são (df_jogoscopasdomundo, df_jogadores_copasdomundo, df_campeoes_copasdomundo)
+Aplicacao Streamlit para analisar jogos da Copa do Mundo 2026 com base no historico das Copas e na tabela atualizada da fase de grupos.
 
-# Insights da Base de dados
-1 - Quem são os maiores vencedores?
+## O que a app faz
 
-2 - Seleções que mais ficaram em segundo lugar na Copa do Mundo?
+- Lista os 48 participantes e os 72 jogos da fase de grupos de 2026.
+- Calcula um rating por selecao usando desempenho historico em Copas, gols, vitorias, finais e titulos.
+- Estima probabilidades 1X2 para cada jogo: vitoria do time A, empate e vitoria do time B.
+- Estima gols esperados para cada selecao e total da partida.
+- Calcula indicadores de gols: acima de 1.5, 2.5, 3.5 e ambos marcam.
+- Mostra os placares mais provaveis por distribuicao de Poisson.
+- Mostra bandeiras dos paises e um card de palpite sugerido para bolao.
+- Projeta a classificacao esperada do grupo com pontos, gols pro, gols contra e saldo.
 
-3 - Qual foi a média de Público na Copa do Mundo?
+## Como executar
 
-4 - Média de Gols na Copa do Mundo? 
+```bash
+pip install -r requirements.txt
+streamlit run main.py
+```
 
-# Deploy do modelo de Machine learning na ferramenta streamlit
-https://thiagoramos20042-copa-dos-dados-copa-dos-dados-pvz399.streamlitapp.com/
+## Dados
+
+- `Jogos Copas do Mundo.csv`: historico de partidas usado no rating.
+- `Campeoes.csv`: campeoes e finalistas usados no rating.
+- `data/world_cup_2026_teams.csv`: selecoes, grupos e confederacoes da Copa 2026.
+- `data/world_cup_2026_group_stage.csv`: calendario da fase de grupos 2026.
+
+Referencias usadas para a atualizacao de 2026:
+
+- FIFA: calendario e sedes da Copa do Mundo 2026.
+- FIFA/Wikipedia: grupos, datas e formato da fase de grupos, consultados em maio de 2026.
+
+## Aviso
+
+Esta aplicacao e uma ferramenta estatistica para estudo. Ela nao garante resultados e nao deve ser tratada como recomendacao financeira ou promessa de lucro.
