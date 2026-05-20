@@ -704,10 +704,6 @@ def main():
             <div class="hero-content">
                 <div class="hero-meta">Modelo estatístico para bolão</div>
                 <div class="hero-title">Copa dos Dados 2026</div>
-                <div class="hero-copy">
-                    Primeiro o palpite acionável; depois, as probabilidades e os sinais de gols.
-                    Use a projeção como apoio para priorizar jogos em que vale arriscar ou jogar de forma conservadora.
-                </div>
             </div>
         </div>
         """,
