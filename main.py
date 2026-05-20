@@ -335,7 +335,7 @@ def projected_group_table(group, fixtures, ratings):
     group_fixtures = fixtures[fixtures["group"] == group]
     teams = sorted(set(group_fixtures["home_team"]) | set(group_fixtures["away_team"]))
     table = {
-        team: {"Selecao": team_label(team), "PJ": 3, "Pts esp.": 0.0, "GP esp.": 0.0, "GC esp.": 0.0}
+        team: {"Seleção": team_label(team), "PJ": 3, "Pts. esp.": 0.0, "GP esp.": 0.0, "GC esp.": 0.0}
         for team in teams
     }
 
@@ -345,8 +345,8 @@ def projected_group_table(group, fixtures, ratings):
         probabilities = match_probabilities(home, away, ratings)
         expected_home, expected_away = estimate_goals(home, away, ratings)
 
-        table[home]["Pts esp."] += probabilities["home"] * 3 + probabilities["draw"]
-        table[away]["Pts esp."] += probabilities["away"] * 3 + probabilities["draw"]
+        table[home]["Pts. esp."] += probabilities["home"] * 3 + probabilities["draw"]
+        table[away]["Pts. esp."] += probabilities["away"] * 3 + probabilities["draw"]
         table[home]["GP esp."] += expected_home
         table[home]["GC esp."] += expected_away
         table[away]["GP esp."] += expected_away
@@ -354,9 +354,9 @@ def projected_group_table(group, fixtures, ratings):
 
     projection = pd.DataFrame(table.values())
     projection["SG esp."] = projection["GP esp."] - projection["GC esp."]
-    numeric_cols = ["Pts esp.", "GP esp.", "GC esp.", "SG esp."]
+    numeric_cols = ["Pts. esp.", "GP esp.", "GC esp.", "SG esp."]
     projection[numeric_cols] = projection[numeric_cols].round(2)
-    return projection.sort_values(["Pts esp.", "SG esp.", "GP esp."], ascending=False)
+    return projection.sort_values(["Pts. esp.", "SG esp.", "GP esp."], ascending=False)
 
 
 def apply_theme():
@@ -670,11 +670,11 @@ def main():
     st.markdown(
         """
         <div class="hero">
-            <div class="hero-meta">Modelo estatistico para bolao</div>
+            <div class="hero-meta">Modelo estatístico para bolão</div>
             <div class="hero-title">Copa dos Dados 2026</div>
             <div class="hero-copy">
-                Primeiro o palpite acionavel, depois as probabilidades e os sinais de gols.
-                Use a projecao como apoio para priorizar jogos em que vale arriscar ou jogar conservador.
+                Primeiro o palpite acionável; depois, as probabilidades e os sinais de gols.
+                Use a projeção como apoio para priorizar jogos em que vale arriscar ou jogar de forma conservadora.
             </div>
         </div>
         """,
@@ -709,7 +709,7 @@ def main():
     pick, pick_probability, confidence, score = pick_for_pool(home, away, probabilities, goals)
     pick_label = "Empate" if pick == "Empate" else team_label(pick)
     pick_badge = "Empate" if pick == "Empate" else team_badge(pick)
-    goals_signal = "Tende a ter gols" if goals["over_2_5"] >= 0.54 else "Tende a ser travado"
+    goals_signal = "Tende a ter gols" if goals["over_2_5"] >= 0.54 else "Tende a ser um jogo travado"
     both_score_signal = "Ambos marcam forte" if goals["both_score"] >= 0.52 else "Ambos marcam moderado"
 
     st.markdown(
@@ -727,19 +727,19 @@ def main():
         f"""
         <div class="decision-grid">
             <div class="decision-card primary">
-                <div class="card-label">Palpite do bolao</div>
+                <div class="card-label">Palpite do bolão</div>
                 <div class="card-value">{pick_badge}</div>
-                <div class="card-sub">{pct(pick_probability)} de probabilidade | confianca {confidence}</div>
+                <div class="card-sub">{pct(pick_probability)} de probabilidade | confiança {confidence}</div>
             </div>
             <div class="decision-card">
                 <div class="card-label">Placar modal</div>
                 <div class="card-value">{score}</div>
-                <div class="card-sub">Resultado mais provavel na matriz de gols</div>
+                <div class="card-sub">Resultado mais provável na matriz de gols</div>
             </div>
             <div class="decision-card">
                 <div class="card-label">Gols esperados</div>
                 <div class="card-value">{expected_home + expected_away:.2f}</div>
-                <div class="card-sub">{goals_signal} | over 2.5: {pct(goals['over_2_5'])}</div>
+                <div class="card-sub">{goals_signal} | acima de 2,5 gols: {pct(goals['over_2_5'])}</div>
             </div>
             <div class="decision-card">
                 <div class="card-label">Ambos marcam</div>
@@ -756,10 +756,10 @@ def main():
         st.markdown(
             f"""
             <div class="pick-card">
-                <div class="pick-label">Recomendacao estatistica</div>
+                <div class="pick-label">Recomendação estatística</div>
                 <div class="pick-main">{pick_label}</div>
                 <div class="pick-meta">Probabilidade do palpite: <strong>{pct(pick_probability)}</strong></div>
-                <div class="pick-meta">Placar mais provavel: <strong>{score}</strong></div>
+                <div class="pick-meta">Placar mais provável: <strong>{score}</strong></div>
                 <div class="pick-meta" style="margin-top:10px;">
                     Confianca:
                     <span class="confidence-pill" style="background:{RESULT_COLORS[confidence]};">{confidence}</span>
@@ -773,11 +773,11 @@ def main():
         st.subheader("Como ler o jogo")
         if pick == "Empate":
             st.write(
-                "O confronto aparece equilibrado no rating e na distribuicao de gols. Para bolao, o empate ganha peso quando a diferenca de forca e pequena."
+                "O confronto aparece equilibrado no rating e na distribuição de gols. Para bolão, o empate ganha peso quando a diferença de força é pequena."
             )
         else:
             st.write(
-                f"{team_label(pick)} tem a maior probabilidade projetada, combinando rating historico, forca ofensiva e gols esperados."
+                f"{team_label(pick)} tem a maior probabilidade projetada, combinando rating histórico, força ofensiva e gols esperados."
             )
         st.write(
             f"O modelo projeta **{expected_home + expected_away:.2f} gols** na partida, com placar modal **{score}**."
@@ -787,11 +787,11 @@ def main():
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        metric_card(f"Vitoria {team_label(home)}", f"{probabilities['home']:.1%}")
+        metric_card(f"Vitória {team_label(home)}", f"{probabilities['home']:.1%}")
     with c2:
         metric_card("Empate", f"{probabilities['draw']:.1%}")
     with c3:
-        metric_card(f"Vitoria {team_label(away)}", f"{probabilities['away']:.1%}")
+        metric_card(f"Vitória {team_label(away)}", f"{probabilities['away']:.1%}")
 
     st.divider()
 
@@ -808,16 +808,16 @@ def main():
 
         goal_rows = pd.DataFrame(
             [
-                {"Indicador": "Acima de 1.5 gols", "Probabilidade": f"{goals['over_1_5']:.1%}"},
-                {"Indicador": "Acima de 2.5 gols", "Probabilidade": f"{goals['over_2_5']:.1%}"},
-                {"Indicador": "Acima de 3.5 gols", "Probabilidade": f"{goals['over_3_5']:.1%}"},
+                {"Indicador": "Acima de 1,5 gol", "Probabilidade": f"{goals['over_1_5']:.1%}"},
+                {"Indicador": "Acima de 2,5 gols", "Probabilidade": f"{goals['over_2_5']:.1%}"},
+                {"Indicador": "Acima de 3,5 gols", "Probabilidade": f"{goals['over_3_5']:.1%}"},
                 {"Indicador": "Ambos marcam", "Probabilidade": f"{goals['both_score']:.1%}"},
             ]
         )
         st.dataframe(goal_rows, use_container_width=True, hide_index=True)
 
     with score_col:
-        st.subheader("Placares mais provaveis")
+        st.subheader("Placares mais prováveis")
         scorelines = goals["scorelines"].copy()
         scorelines["Placar"] = (
             scorelines["home_goals"].astype(str)
@@ -855,7 +855,7 @@ def main():
 
     st.divider()
 
-    st.subheader(f"Projecao do Grupo {selected_match['group']}")
+    st.subheader(f"Projeção do Grupo {selected_match['group']}")
     st.dataframe(
         projected_group_table(selected_match["group"], fixtures, ratings),
         use_container_width=True,
@@ -906,7 +906,7 @@ def main():
     )
 
     st.caption(
-        "Dados de selecoes e grupos da Copa 2026 atualizados em maio de 2026 a partir do calendario oficial da FIFA e consolidacao publica da competicao."
+        "Dados de seleções e grupos da Copa 2026 atualizados em maio de 2026 a partir do calendário oficial da FIFA e da consolidação pública da competição."
     )
 
     st.markdown(
@@ -914,11 +914,11 @@ def main():
         <div class="author-panel">
             <div>
                 <div class="author-title">Feito por Thiago Ramos de Oliveira</div>
-                <div class="author-subtitle">Cientista de dados | Modelagem estatistica aplicada a futebol e decisoes de bolao</div>
+                <div class="author-subtitle">Cientista de dados | Modelagem estatística aplicada a futebol e decisões de bolão</div>
             </div>
             <a class="linkedin-cta" href="https://www.linkedin.com/in/thiago-ramos-oliveira/" target="_blank" rel="noopener noreferrer">
                 <span class="linkedin-logo">in</span>
-                Clique e conheca meu LinkedIn
+                Clique e conheça meu LinkedIn
             </a>
         </div>
         """,
