@@ -1,4 +1,5 @@
 from pathlib import Path
+import base64
 import math
 
 import numpy as np
@@ -8,6 +9,7 @@ import streamlit as st
 
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
+ASSETS_DIR = BASE_DIR / "assets"
 
 TEAM_ALIASES = {
     "USA": "United States",
@@ -393,28 +395,33 @@ def apply_theme():
             .hero {
                 border: 1px solid var(--line);
                 background:
-                    linear-gradient(135deg, rgba(6, 118, 71, .10), rgba(23, 92, 211, .08)),
-                    #ffffff;
-                padding: 22px 24px;
+                    linear-gradient(90deg, rgba(6, 24, 38, .92) 0%, rgba(6, 24, 38, .72) 46%, rgba(6, 24, 38, .20) 100%),
+                    var(--hero-cover);
+                background-position: center;
+                background-size: cover;
+                min-height: 285px;
+                padding: 32px 34px;
                 border-radius: 8px;
                 margin-bottom: 20px;
+                overflow: hidden;
             }
 
             .hero-title {
                 font-size: 34px;
                 font-weight: 750;
-                color: var(--ink);
+                color: #ffffff;
                 margin-bottom: 6px;
+                max-width: 620px;
             }
 
             .hero-copy {
-                color: var(--muted);
+                color: rgba(255, 255, 255, .82);
                 font-size: 16px;
                 max-width: 760px;
             }
 
             .hero-meta {
-                color: var(--green);
+                color: #a7f3d0;
                 font-size: 13px;
                 font-weight: 750;
                 letter-spacing: .06em;
@@ -656,6 +663,11 @@ def pct(value):
     return f"{value:.1%}"
 
 
+def image_data_uri(path):
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
 def metric_card(label, value, help_text=None):
     st.metric(label, value, help=help_text)
 
@@ -666,10 +678,11 @@ def main():
 
     matches, champions, teams_2026, fixtures = load_data()
     ratings = build_team_ratings(matches, champions, teams_2026)
+    cover_uri = image_data_uri(ASSETS_DIR / "copa-dados-cover.png")
 
     st.markdown(
-        """
-        <div class="hero">
+        f"""
+        <div class="hero" style="--hero-cover: url('{cover_uri}');">
             <div class="hero-meta">Modelo estatístico para bolão</div>
             <div class="hero-title">Copa dos Dados 2026</div>
             <div class="hero-copy">
