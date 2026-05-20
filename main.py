@@ -80,6 +80,57 @@ RESULT_COLORS = {
     "Baixa": "#991b1b",
 }
 
+COUNTRY_CODE_BY_TEAM = {
+    "Algeria": "DZ",
+    "Argentina": "AR",
+    "Australia": "AU",
+    "Austria": "AT",
+    "Belgium": "BE",
+    "Bosnia and Herzegovina": "BA",
+    "Brazil": "BR",
+    "Canada": "CA",
+    "Cape Verde": "CV",
+    "Colombia": "CO",
+    "Croatia": "HR",
+    "Curacao": "CW",
+    "Czech Republic": "CZ",
+    "DR Congo": "CD",
+    "Ecuador": "EC",
+    "Egypt": "EG",
+    "England": "GB",
+    "France": "FR",
+    "Germany": "DE",
+    "Ghana": "GH",
+    "Haiti": "HT",
+    "Iran": "IR",
+    "Iraq": "IQ",
+    "Ivory Coast": "CI",
+    "Japan": "JP",
+    "Jordan": "JO",
+    "Mexico": "MX",
+    "Morocco": "MA",
+    "Netherlands": "NL",
+    "New Zealand": "NZ",
+    "Norway": "NO",
+    "Panama": "PA",
+    "Paraguay": "PY",
+    "Portugal": "PT",
+    "Qatar": "QA",
+    "Saudi Arabia": "SA",
+    "Scotland": "GB",
+    "Senegal": "SN",
+    "South Africa": "ZA",
+    "South Korea": "KR",
+    "Spain": "ES",
+    "Sweden": "SE",
+    "Switzerland": "CH",
+    "Tunisia": "TN",
+    "Turkey": "TR",
+    "United States": "US",
+    "Uruguay": "UY",
+    "Uzbekistan": "UZ",
+}
+
 
 @st.cache_data
 def load_data():
@@ -313,12 +364,15 @@ def apply_theme():
         """
         <style>
             :root {
-                --ink: #172033;
+                --ink: #101828;
                 --muted: #667085;
-                --line: #d9e2ec;
+                --line: #d0d5dd;
                 --surface: #ffffff;
-                --surface-soft: #f5f8fb;
-                --green: #0f6b4f;
+                --surface-soft: #f8fafc;
+                --green: #067647;
+                --blue: #175cd3;
+                --gold: #b54708;
+                --red: #b42318;
             }
 
             .main .block-container {
@@ -338,7 +392,9 @@ def apply_theme():
 
             .hero {
                 border: 1px solid var(--line);
-                background: linear-gradient(135deg, #ffffff 0%, #f4f8fb 55%, #edf7f2 100%);
+                background:
+                    linear-gradient(135deg, rgba(6, 118, 71, .10), rgba(23, 92, 211, .08)),
+                    #ffffff;
                 padding: 22px 24px;
                 border-radius: 8px;
                 margin-bottom: 20px;
@@ -357,6 +413,15 @@ def apply_theme():
                 max-width: 760px;
             }
 
+            .hero-meta {
+                color: var(--green);
+                font-size: 13px;
+                font-weight: 750;
+                letter-spacing: .06em;
+                margin-bottom: 8px;
+                text-transform: uppercase;
+            }
+
             .match-strip {
                 display: flex;
                 align-items: center;
@@ -370,9 +435,20 @@ def apply_theme():
             }
 
             .team-name {
+                align-items: center;
+                display: flex;
+                gap: 10px;
                 font-size: 24px;
                 font-weight: 750;
                 color: var(--ink);
+            }
+
+            .flag-img {
+                border: 1px solid rgba(16, 24, 40, .12);
+                border-radius: 3px;
+                height: 24px;
+                object-fit: cover;
+                width: 34px;
             }
 
             .versus {
@@ -381,6 +457,58 @@ def apply_theme():
                 text-align: center;
                 text-transform: uppercase;
                 letter-spacing: .08em;
+            }
+
+            .decision-grid {
+                display: grid;
+                gap: 14px;
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+                margin-bottom: 18px;
+            }
+
+            .decision-card {
+                border: 1px solid var(--line);
+                border-radius: 8px;
+                background: var(--surface);
+                padding: 16px 18px;
+                min-height: 124px;
+            }
+
+            .decision-card.primary {
+                background: #063f2f;
+                border-color: #063f2f;
+                color: #ffffff;
+            }
+
+            .decision-card.primary .card-label,
+            .decision-card.primary .card-sub {
+                color: rgba(255, 255, 255, .78);
+            }
+
+            .card-label {
+                color: var(--muted);
+                font-size: 12px;
+                font-weight: 750;
+                letter-spacing: .07em;
+                margin-bottom: 8px;
+                text-transform: uppercase;
+            }
+
+            .card-value {
+                align-items: center;
+                color: inherit;
+                display: flex;
+                gap: 10px;
+                font-size: 28px;
+                font-weight: 800;
+                line-height: 1.1;
+                margin-bottom: 6px;
+            }
+
+            .card-sub {
+                color: var(--muted);
+                font-size: 13px;
+                line-height: 1.35;
             }
 
             .pick-card {
@@ -433,10 +561,46 @@ def apply_theme():
             div[data-testid="stMetricLabel"] {
                 color: var(--muted);
             }
+
+            @media (max-width: 900px) {
+                .decision-grid {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+                .match-strip {
+                    align-items: flex-start;
+                    flex-direction: column;
+                }
+                .versus {
+                    text-align: left;
+                }
+            }
         </style>
         """,
         unsafe_allow_html=True,
     )
+
+
+def flag_emoji(team):
+    code = COUNTRY_CODE_BY_TEAM.get(team)
+    if not code:
+        return ""
+    return "".join(chr(0x1F1E6 + ord(letter) - ord("A")) for letter in code.upper())
+
+
+def team_label(team):
+    flag = flag_emoji(team)
+    return f"{flag} {team}".strip()
+
+
+def team_badge(team):
+    code = COUNTRY_CODE_BY_TEAM.get(team, "")
+    src = f"https://flagcdn.com/w40/{code.lower()}.png" if code else ""
+    image = f'<img src="{src}" alt="{team}" class="flag-img">' if src else ""
+    return f'{image}<span>{team}</span>'
+
+
+def pct(value):
+    return f"{value:.1%}"
 
 
 def metric_card(label, value, help_text=None):
@@ -453,10 +617,11 @@ def main():
     st.markdown(
         """
         <div class="hero">
+            <div class="hero-meta">Modelo estatistico para bolao</div>
             <div class="hero-title">Copa dos Dados 2026</div>
             <div class="hero-copy">
-                Painel para bolao com palpites sugeridos, probabilidades de resultado,
-                gols esperados e projecao de grupos.
+                Primeiro o palpite acionavel, depois as probabilidades e os sinais de gols.
+                Use a projecao como apoio para priorizar jogos em que vale arriscar ou jogar conservador.
             </div>
         </div>
         """,
@@ -476,9 +641,9 @@ def main():
         + " | Grupo "
         + filtered_fixtures["group"]
         + " | "
-        + filtered_fixtures["home_team"]
+        + filtered_fixtures["home_team"].map(team_label)
         + " x "
-        + filtered_fixtures["away_team"]
+        + filtered_fixtures["away_team"].map(team_label)
     )
     selected_label = st.sidebar.selectbox("Jogo", fixture_labels)
     selected_match = filtered_fixtures.loc[fixture_labels == selected_label].iloc[0]
@@ -489,13 +654,45 @@ def main():
     expected_home, expected_away = estimate_goals(home, away, ratings)
     goals = goal_markets(expected_home, expected_away)
     pick, pick_probability, confidence, score = pick_for_pool(home, away, probabilities, goals)
+    pick_label = "Empate" if pick == "Empate" else team_label(pick)
+    pick_badge = "Empate" if pick == "Empate" else team_badge(pick)
+    goals_signal = "Tende a ter gols" if goals["over_2_5"] >= 0.54 else "Tende a ser travado"
+    both_score_signal = "Ambos marcam forte" if goals["both_score"] >= 0.52 else "Ambos marcam moderado"
 
     st.markdown(
         f"""
         <div class="match-strip">
-            <div class="team-name">{team_label(home)}</div>
+            <div class="team-name">{team_badge(home)}</div>
             <div class="versus">Grupo {selected_match['group']}<br>{selected_match['date']}<br>Rodada {selected_match['matchday']}</div>
-            <div class="team-name">{team_label(away)}</div>
+            <div class="team-name">{team_badge(away)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        f"""
+        <div class="decision-grid">
+            <div class="decision-card primary">
+                <div class="card-label">Palpite do bolao</div>
+                <div class="card-value">{pick_badge}</div>
+                <div class="card-sub">{pct(pick_probability)} de probabilidade | confianca {confidence}</div>
+            </div>
+            <div class="decision-card">
+                <div class="card-label">Placar modal</div>
+                <div class="card-value">{score}</div>
+                <div class="card-sub">Resultado mais provavel na matriz de gols</div>
+            </div>
+            <div class="decision-card">
+                <div class="card-label">Gols esperados</div>
+                <div class="card-value">{expected_home + expected_away:.2f}</div>
+                <div class="card-sub">{goals_signal} | over 2.5: {pct(goals['over_2_5'])}</div>
+            </div>
+            <div class="decision-card">
+                <div class="card-label">Ambos marcam</div>
+                <div class="card-value">{pct(goals['both_score'])}</div>
+                <div class="card-sub">{both_score_signal}</div>
+            </div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -503,13 +700,12 @@ def main():
 
     pick_col, detail_col = st.columns([1, 1])
     with pick_col:
-        pick_label = "Empate" if pick == "Empate" else team_label(pick)
         st.markdown(
             f"""
             <div class="pick-card">
-                <div class="pick-label">Palpite sugerido para o bolao</div>
+                <div class="pick-label">Recomendacao estatistica</div>
                 <div class="pick-main">{pick_label}</div>
-                <div class="pick-meta">Probabilidade do palpite: <strong>{pick_probability:.1%}</strong></div>
+                <div class="pick-meta">Probabilidade do palpite: <strong>{pct(pick_probability)}</strong></div>
                 <div class="pick-meta">Placar mais provavel: <strong>{score}</strong></div>
                 <div class="pick-meta" style="margin-top:10px;">
                     Confianca:
