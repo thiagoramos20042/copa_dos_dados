@@ -943,7 +943,7 @@ def main():
         <div class="author-panel">
             <div>
                 <div class="author-title">Feito por Thiago Ramos de Oliveira</div>
-                <div class="author-subtitle">Cientista de dados | Modelagem estatística aplicada a futebol e decisões de bolão</div>
+                <div class="author-subtitle">Cientista de dados, programador python</div>
             </div>
             <a class="linkedin-cta" href="https://www.linkedin.com/in/thiago-ramos-oliveira/" target="_blank" rel="noopener noreferrer">
                 <span class="linkedin-logo">in</span>
