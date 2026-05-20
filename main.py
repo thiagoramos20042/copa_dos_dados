@@ -394,16 +394,32 @@ def apply_theme():
 
             .hero {
                 border: 1px solid var(--line);
-                background:
-                    linear-gradient(90deg, rgba(6, 24, 38, .92) 0%, rgba(6, 24, 38, .72) 46%, rgba(6, 24, 38, .20) 100%),
-                    var(--hero-cover);
-                background-position: center;
-                background-size: cover;
+                background: #071827;
                 min-height: 285px;
-                padding: 32px 34px;
                 border-radius: 8px;
                 margin-bottom: 20px;
                 overflow: hidden;
+                position: relative;
+            }
+
+            .hero-img {
+                height: 100%;
+                inset: 0;
+                object-fit: cover;
+                position: absolute;
+                width: 100%;
+            }
+
+            .hero-overlay {
+                background: linear-gradient(90deg, rgba(6, 24, 38, .94) 0%, rgba(6, 24, 38, .74) 48%, rgba(6, 24, 38, .18) 100%);
+                inset: 0;
+                position: absolute;
+            }
+
+            .hero-content {
+                padding: 32px 34px;
+                position: relative;
+                z-index: 1;
             }
 
             .hero-title {
@@ -682,12 +698,16 @@ def main():
 
     st.markdown(
         f"""
-        <div class="hero" style="--hero-cover: url('{cover_uri}');">
-            <div class="hero-meta">Modelo estatístico para bolão</div>
-            <div class="hero-title">Copa dos Dados 2026</div>
-            <div class="hero-copy">
-                Primeiro o palpite acionável; depois, as probabilidades e os sinais de gols.
-                Use a projeção como apoio para priorizar jogos em que vale arriscar ou jogar de forma conservadora.
+        <div class="hero">
+            <img class="hero-img" src="{cover_uri}" alt="Capa com futebol e ciência de dados">
+            <div class="hero-overlay"></div>
+            <div class="hero-content">
+                <div class="hero-meta">Modelo estatístico para bolão</div>
+                <div class="hero-title">Copa dos Dados 2026</div>
+                <div class="hero-copy">
+                    Primeiro o palpite acionável; depois, as probabilidades e os sinais de gols.
+                    Use a projeção como apoio para priorizar jogos em que vale arriscar ou jogar de forma conservadora.
+                </div>
             </div>
         </div>
         """,
