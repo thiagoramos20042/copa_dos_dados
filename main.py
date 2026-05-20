@@ -562,6 +562,55 @@ def apply_theme():
                 color: var(--muted);
             }
 
+            .author-panel {
+                align-items: center;
+                background: #101828;
+                border-radius: 8px;
+                color: #ffffff;
+                display: flex;
+                gap: 18px;
+                justify-content: space-between;
+                margin-top: 18px;
+                padding: 20px 22px;
+            }
+
+            .author-title {
+                font-size: 20px;
+                font-weight: 800;
+                margin-bottom: 4px;
+            }
+
+            .author-subtitle {
+                color: rgba(255, 255, 255, .72);
+                font-size: 14px;
+            }
+
+            .linkedin-cta {
+                align-items: center;
+                background: #0a66c2;
+                border-radius: 8px;
+                color: #ffffff !important;
+                display: inline-flex;
+                font-weight: 750;
+                gap: 10px;
+                padding: 12px 16px;
+                text-decoration: none !important;
+                white-space: nowrap;
+            }
+
+            .linkedin-logo {
+                align-items: center;
+                background: #ffffff;
+                border-radius: 4px;
+                color: #0a66c2;
+                display: inline-flex;
+                font-size: 18px;
+                font-weight: 900;
+                height: 24px;
+                justify-content: center;
+                width: 24px;
+            }
+
             @media (max-width: 900px) {
                 .decision-grid {
                     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -572,6 +621,10 @@ def apply_theme():
                 }
                 .versus {
                     text-align: left;
+                }
+                .author-panel {
+                    align-items: flex-start;
+                    flex-direction: column;
                 }
             }
         </style>
@@ -836,46 +889,40 @@ def main():
 
     st.divider()
 
-    left, right = st.columns([1, 1])
-    with left:
-        st.subheader("Ranking de forca")
-        display_ratings = ratings.copy()
-        display_ratings["Selecao"] = display_ratings["team"].map(team_label)
-        st.dataframe(
-            display_ratings[
-                [
-                    "Selecao",
-                    "group",
-                    "confederation",
-                    "rating",
-                    "played",
-                    "wins",
-                    "goals_for_per_match",
-                    "goals_against_per_match",
-                    "titles",
-                    "finals",
-                ]
-            ].head(48),
-            use_container_width=True,
-            hide_index=True,
-        )
-
-    with right:
-        st.subheader("Tabela de jogos")
-        display_fixtures = fixtures.copy()
-        display_fixtures["match"] = (
-            display_fixtures["home_team"].map(team_label)
-            + " x "
-            + display_fixtures["away_team"].map(team_label)
-        )
-        st.dataframe(
-            display_fixtures[["date", "group", "matchday", "match"]],
-            use_container_width=True,
-            hide_index=True,
-        )
+    st.subheader("Jogos da fase de grupos")
+    display_fixtures = fixtures.copy()
+    display_fixtures["Jogo"] = (
+        display_fixtures["home_team"].map(team_label)
+        + " x "
+        + display_fixtures["away_team"].map(team_label)
+    )
+    display_fixtures = display_fixtures.rename(
+        columns={"date": "Data", "group": "Grupo", "matchday": "Rodada"}
+    )
+    st.dataframe(
+        display_fixtures[["Data", "Grupo", "Rodada", "Jogo"]],
+        use_container_width=True,
+        hide_index=True,
+    )
 
     st.caption(
         "Dados de selecoes e grupos da Copa 2026 atualizados em maio de 2026 a partir do calendario oficial da FIFA e consolidacao publica da competicao."
+    )
+
+    st.markdown(
+        """
+        <div class="author-panel">
+            <div>
+                <div class="author-title">Feito por Thiago Ramos de Oliveira</div>
+                <div class="author-subtitle">Cientista de dados | Modelagem estatistica aplicada a futebol e decisoes de bolao</div>
+            </div>
+            <a class="linkedin-cta" href="https://www.linkedin.com/in/thiago-ramos-oliveira/" target="_blank" rel="noopener noreferrer">
+                <span class="linkedin-logo">in</span>
+                Clique e conheca meu LinkedIn
+            </a>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
 
