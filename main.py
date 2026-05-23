@@ -164,11 +164,6 @@ def get_config_value(name, default=None):
     return default
 
 
-def read_local_results():
-    results = pd.read_csv(DATA_DIR / "world_cup_2026_results.csv")
-    return normalize_results(results)
-
-
 def normalize_results(results):
     normalized = results.copy()
     for column in RESULTS_COLUMNS:
@@ -314,7 +309,7 @@ def normalize_api_records(records, fixtures=None):
 def fetch_results_from_api(fixtures=None):
     url = get_config_value("RESULTS_API_URL", DEFAULT_RESULTS_API_URL)
     if not url:
-        return pd.DataFrame(columns=RESULTS_COLUMNS), "CSV local"
+        return pd.DataFrame(columns=RESULTS_COLUMNS), "API não configurada"
 
     api_key = get_config_value("RESULTS_API_KEY")
     auth_header = get_config_value("RESULTS_API_AUTH_HEADER", "Authorization")
@@ -328,31 +323,20 @@ def fetch_results_from_api(fixtures=None):
         with urllib.request.urlopen(request, timeout=15) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
-        return pd.DataFrame(columns=RESULTS_COLUMNS), "CSV local"
+        return pd.DataFrame(columns=RESULTS_COLUMNS), "API pública OpenFootball indisponível"
 
     api_results = normalize_api_records(records_from_payload(payload), fixtures)
     if api_results.empty:
-        return pd.DataFrame(columns=RESULTS_COLUMNS), "CSV local"
+        return pd.DataFrame(columns=RESULTS_COLUMNS), "API pública OpenFootball"
 
     source = "API pública OpenFootball" if url == DEFAULT_RESULTS_API_URL else "API"
     return api_results, source
 
 
 def load_results(fixtures=None):
-    local_results = read_local_results()
-    api_results, source = fetch_results_from_api(fixtures)
-    if api_results.empty:
-        return local_results, "CSV local"
+    return fetch_results_from_api(fixtures)
 
-    merged = local_results.set_index("match_id")
-    api_indexed = api_results.set_index("match_id")
-    for match_id, row in api_indexed.iterrows():
-        if match_id in merged.index:
-            merged.loc[match_id, ["actual_home_goals", "actual_away_goals", "status", "notes"]] = row[["actual_home_goals", "actual_away_goals", "status", "notes"]]
-        else:
-            merged.loc[match_id] = row
 
-    return normalize_results(merged.reset_index()), source
 def normalize_team(team):
     if pd.isna(team):
         return team
@@ -680,8 +664,7 @@ def render_accuracy_dashboard(fixtures, results, ratings, results_source):
     st.title("Estatísticas de acertos")
     st.write(
         "Compare o que o modelo estatístico indicou antes dos jogos com o que aconteceu de fato. "
-        f"A fonte atual dos resultados é **{results_source}**. Quando uma API estiver configurada, "
-        "os placares serão atualizados automaticamente; caso contrário, o CSV local será usado como fallback."
+        f"A fonte atual dos resultados é **{results_source}**."
     )
 
     tracking = build_tracking_table(fixtures, results, ratings)
@@ -713,7 +696,7 @@ def render_accuracy_dashboard(fixtures, results, ratings, results_source):
 
     if finished.empty:
         st.info(
-            "Ainda não há jogos finalizados na base. A Copa 2026 ainda não começou; a aplicação buscará os placares pela API pública configurada e manterá o CSV local apenas como fallback."
+            "Nenhum jogo finalizado foi encontrado na API até agora."
         )
     else:
         hit_rows = finished[finished["_hit_result"] == True]
