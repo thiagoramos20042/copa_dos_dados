@@ -27,7 +27,35 @@ streamlit run main.py
 - `Campeoes.csv`: campeões e finalistas usados no rating.
 - `data/world_cup_2026_teams.csv`: seleções, grupos e confederações da Copa 2026.
 - `data/world_cup_2026_group_stage.csv`: calendário da fase de grupos 2026.
-- `data/world_cup_2026_results.csv`: placares reais usados para medir os acertos quando os jogos forem finalizados.
+- `data/world_cup_2026_results.csv`: fallback local de placares reais quando nenhuma API estiver configurada.
+
+## Resultados via API
+
+A página `Estatísticas de acertos` pode buscar placares reais diretamente de uma API. No Streamlit Cloud, configure em **Settings > Secrets**:
+
+```toml
+RESULTS_API_URL = "https://sua-api.com/world-cup-2026/results"
+RESULTS_API_KEY = "seu_token_opcional"
+RESULTS_API_AUTH_HEADER = "Authorization"
+RESULTS_API_AUTH_PREFIX = "Bearer"
+```
+
+A API deve retornar uma lista ou um objeto com uma lista em `results`, `matches`, `fixtures`, `data` ou `response`.
+
+Formato recomendado:
+
+```json
+[
+  {
+    "match_id": 1,
+    "actual_home_goals": 2,
+    "actual_away_goals": 1,
+    "status": "finalizado"
+  }
+]
+```
+
+Se a API não estiver configurada ou falhar, a aplicação usa automaticamente o CSV local como fallback.
 
 Referências usadas para a atualização de 2026:
 

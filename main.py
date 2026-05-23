@@ -1,6 +1,10 @@
 ﻿from pathlib import Path
 import base64
+import json
 import math
+import os
+import urllib.error
+import urllib.request
 
 import numpy as np
 import pandas as pd
@@ -10,6 +14,7 @@ import streamlit as st
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
 ASSETS_DIR = BASE_DIR / "assets"
+RESULTS_COLUMNS = ["match_id", "actual_home_goals", "actual_away_goals", "status", "notes"]
 
 TEAM_ALIASES = {
     "USA": "United States",
@@ -140,10 +145,150 @@ def load_data():
     champions = pd.read_csv(BASE_DIR / "Campeoes.csv")
     teams_2026 = pd.read_csv(DATA_DIR / "world_cup_2026_teams.csv")
     fixtures = pd.read_csv(DATA_DIR / "world_cup_2026_group_stage.csv")
+    results, results_source = load_results()
+    return matches, champions, teams_2026, fixtures, results, results_source
+
+
+def get_config_value(name, default=None):
+    value = os.environ.get(name)
+    if value:
+        return value
+
+    try:
+        if name in st.secrets:
+            return st.secrets[name]
+    except Exception:
+        return default
+
+    return default
+
+
+def read_local_results():
     results = pd.read_csv(DATA_DIR / "world_cup_2026_results.csv")
-    return matches, champions, teams_2026, fixtures, results
+    return normalize_results(results)
 
 
+def normalize_results(results):
+    normalized = results.copy()
+    for column in RESULTS_COLUMNS:
+        if column not in normalized.columns:
+            normalized[column] = np.nan
+
+    normalized = normalized[RESULTS_COLUMNS]
+    normalized["match_id"] = pd.to_numeric(normalized["match_id"], errors="coerce")
+    normalized = normalized.dropna(subset=["match_id"])
+    normalized["match_id"] = normalized["match_id"].astype(int)
+    normalized["actual_home_goals"] = pd.to_numeric(normalized["actual_home_goals"], errors="coerce")
+    normalized["actual_away_goals"] = pd.to_numeric(normalized["actual_away_goals"], errors="coerce")
+    normalized["status"] = normalized["status"].fillna("pendente")
+    normalized["notes"] = normalized["notes"].fillna("")
+    return normalized
+
+
+def first_available(record, keys):
+    for key in keys:
+        if key in record and record[key] not in [None, ""]:
+            return record[key]
+    return None
+
+
+def nested_score(record, side):
+    for key in ["score", "goals"]:
+        value = record.get(key)
+        if isinstance(value, dict) and value.get(side) not in [None, ""]:
+            return value.get(side)
+    return None
+
+
+def records_from_payload(payload):
+    if isinstance(payload, list):
+        return payload
+
+    if isinstance(payload, dict):
+        for key in ["results", "matches", "fixtures", "data", "response"]:
+            value = payload.get(key)
+            if isinstance(value, list):
+                return value
+
+    return []
+
+
+def normalize_api_records(records):
+    rows = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+
+        match_id = first_available(record, ["match_id", "id", "fixture_id", "game_id"])
+        home_goals = first_available(record, ["actual_home_goals", "home_goals", "home_score", "score_home", "homeTeamScore", "goals_home"])
+        away_goals = first_available(record, ["actual_away_goals", "away_goals", "away_score", "score_away", "awayTeamScore", "goals_away"])
+
+        if home_goals is None:
+            home_goals = nested_score(record, "home")
+        if away_goals is None:
+            away_goals = nested_score(record, "away")
+
+        status = first_available(record, ["status", "match_status", "state"])
+        if not status:
+            status = "finalizado" if home_goals is not None and away_goals is not None else "pendente"
+
+        rows.append(
+            {
+                "match_id": match_id,
+                "actual_home_goals": home_goals,
+                "actual_away_goals": away_goals,
+                "status": status,
+                "notes": first_available(record, ["notes", "note", "source"]) or "",
+            }
+        )
+
+    if not rows:
+        return pd.DataFrame(columns=RESULTS_COLUMNS)
+
+    return normalize_results(pd.DataFrame(rows))
+
+
+def fetch_results_from_api():
+    url = get_config_value("RESULTS_API_URL")
+    if not url:
+        return pd.DataFrame(columns=RESULTS_COLUMNS), "CSV local"
+
+    api_key = get_config_value("RESULTS_API_KEY")
+    auth_header = get_config_value("RESULTS_API_AUTH_HEADER", "Authorization")
+    auth_prefix = get_config_value("RESULTS_API_AUTH_PREFIX", "Bearer")
+    headers = {"Accept": "application/json"}
+    if api_key:
+        headers[auth_header] = f"{auth_prefix} {api_key}".strip()
+
+    request = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
+        return pd.DataFrame(columns=RESULTS_COLUMNS), "CSV local"
+
+    api_results = normalize_api_records(records_from_payload(payload))
+    if api_results.empty:
+        return pd.DataFrame(columns=RESULTS_COLUMNS), "CSV local"
+
+    return api_results, "API"
+
+
+def load_results():
+    local_results = read_local_results()
+    api_results, source = fetch_results_from_api()
+    if api_results.empty:
+        return local_results, "CSV local"
+
+    merged = local_results.set_index("match_id")
+    api_indexed = api_results.set_index("match_id")
+    for match_id, row in api_indexed.iterrows():
+        if match_id in merged.index:
+            merged.loc[match_id, ["actual_home_goals", "actual_away_goals", "status", "notes"]] = row[["actual_home_goals", "actual_away_goals", "status", "notes"]]
+        else:
+            merged.loc[match_id] = row
+
+    return normalize_results(merged.reset_index()), source
 def normalize_team(team):
     if pd.isna(team):
         return team
@@ -467,12 +612,12 @@ def render_author_panel():
     )
 
 
-def render_accuracy_dashboard(fixtures, results, ratings):
+def render_accuracy_dashboard(fixtures, results, ratings, results_source):
     st.title("Estatísticas de acertos")
     st.write(
         "Compare o que o modelo estatístico indicou antes dos jogos com o que aconteceu de fato. "
-        "Quando os placares reais forem preenchidos no arquivo `data/world_cup_2026_results.csv`, "
-        "as métricas abaixo serão atualizadas automaticamente."
+        f"A fonte atual dos resultados é **{results_source}**. Quando uma API estiver configurada, "
+        "os placares serão atualizados automaticamente; caso contrário, o CSV local será usado como fallback."
     )
 
     tracking = build_tracking_table(fixtures, results, ratings)
@@ -930,7 +1075,7 @@ def main():
     st.set_page_config(page_title="Copa dos Dados 2026", page_icon="WC", layout="wide")
     apply_theme()
 
-    matches, champions, teams_2026, fixtures, results = load_data()
+    matches, champions, teams_2026, fixtures, results, results_source = load_data()
     ratings = build_team_ratings(matches, champions, teams_2026)
     cover_uri = image_data_uri(ASSETS_DIR / "copa-dados-cover.png")
 
@@ -956,7 +1101,7 @@ def main():
     )
 
     if selected_page == "Estatísticas de acertos":
-        render_accuracy_dashboard(fixtures, results, ratings)
+        render_accuracy_dashboard(fixtures, results, ratings, results_source)
         st.caption(
             "Dados de seleções e grupos da Copa 2026 atualizados em maio de 2026 a partir do calendário oficial da FIFA e da consolidação pública da competição."
         )
@@ -1211,3 +1356,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
