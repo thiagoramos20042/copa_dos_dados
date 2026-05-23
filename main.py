@@ -140,7 +140,8 @@ def load_data():
     champions = pd.read_csv(BASE_DIR / "Campeoes.csv")
     teams_2026 = pd.read_csv(DATA_DIR / "world_cup_2026_teams.csv")
     fixtures = pd.read_csv(DATA_DIR / "world_cup_2026_group_stage.csv")
-    return matches, champions, teams_2026, fixtures
+    results = pd.read_csv(DATA_DIR / "world_cup_2026_results.csv")
+    return matches, champions, teams_2026, fixtures, results
 
 
 def normalize_team(team):
@@ -359,6 +360,85 @@ def projected_group_table(group, fixtures, ratings):
     numeric_cols = ["Pts. esp.", "GP esp.", "GC esp.", "SG esp."]
     projection[numeric_cols] = projection[numeric_cols].round(2)
     return projection.sort_values(["Pts. esp.", "SG esp.", "GP esp."], ascending=False)
+
+
+def result_from_goals(home_goals, away_goals, home_team, away_team):
+    if pd.isna(home_goals) or pd.isna(away_goals):
+        return None
+    if home_goals > away_goals:
+        return home_team
+    if away_goals > home_goals:
+        return away_team
+    return "Empate"
+
+
+def yes_no(value):
+    return "Sim" if value else "Não"
+
+
+def build_tracking_table(fixtures, results, ratings):
+    tracking = fixtures.merge(results, on="match_id", how="left")
+    tracking["actual_home_goals"] = pd.to_numeric(tracking["actual_home_goals"], errors="coerce")
+    tracking["actual_away_goals"] = pd.to_numeric(tracking["actual_away_goals"], errors="coerce")
+
+    rows = []
+    for _, match in tracking.iterrows():
+        home = match["home_team"]
+        away = match["away_team"]
+        probabilities = match_probabilities(home, away, ratings)
+        expected_home, expected_away = estimate_goals(home, away, ratings)
+        goals = goal_markets(expected_home, expected_away)
+        pick, pick_probability, confidence, score = pick_for_pool(home, away, probabilities, goals)
+
+        actual_home = match["actual_home_goals"]
+        actual_away = match["actual_away_goals"]
+        played = not pd.isna(actual_home) and not pd.isna(actual_away)
+        actual_result = result_from_goals(actual_home, actual_away, home, away) if played else None
+        actual_score = f"{int(actual_home)} x {int(actual_away)}" if played else "Pendente"
+
+        predicted_over_2_5 = goals["over_2_5"] >= 0.5
+        actual_over_2_5 = (actual_home + actual_away) > 2.5 if played else None
+        predicted_both_score = goals["both_score"] >= 0.5
+        actual_both_score = (actual_home > 0 and actual_away > 0) if played else None
+        hit_result = pick == actual_result if played else None
+        hit_score = score == actual_score if played else None
+        hit_goals = predicted_over_2_5 == actual_over_2_5 if played else None
+        hit_both = predicted_both_score == actual_both_score if played else None
+
+        rows.append(
+            {
+                "Data": match["date"],
+                "Grupo": match["group"],
+                "Jogo": f"{team_label(home)} x {team_label(away)}",
+                "Palpite estatístico": team_label(pick) if pick != "Empate" else "Empate",
+                "Confiança": confidence,
+                "Prob. do palpite": pct(pick_probability),
+                "Placar previsto": score,
+                "Resultado real": team_label(actual_result) if actual_result not in [None, "Empate"] else actual_result or "Pendente",
+                "Placar real": actual_score,
+                "Acertou resultado": yes_no(hit_result) if played else "Pendente",
+                "Acertou placar": yes_no(hit_score) if played else "Pendente",
+                "Prev. acima de 2,5": yes_no(predicted_over_2_5),
+                "Real acima de 2,5": yes_no(actual_over_2_5) if played else "Pendente",
+                "Acertou gols": yes_no(hit_goals) if played else "Pendente",
+                "Prev. ambos marcam": yes_no(predicted_both_score),
+                "Real ambos marcam": yes_no(actual_both_score) if played else "Pendente",
+                "Acertou ambos": yes_no(hit_both) if played else "Pendente",
+                "_hit_result": hit_result,
+                "_hit_score": hit_score,
+                "_hit_goals": hit_goals,
+                "_hit_both": hit_both,
+                "Status": "Finalizado" if played else "Pendente",
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+def accuracy_rate(series):
+    if series.empty:
+        return "0,0%"
+    return f"{series.mean():.1%}".replace(".", ",")
 
 
 def apply_theme():
@@ -692,7 +772,7 @@ def main():
     st.set_page_config(page_title="Copa dos Dados 2026", page_icon="WC", layout="wide")
     apply_theme()
 
-    matches, champions, teams_2026, fixtures = load_data()
+    matches, champions, teams_2026, fixtures, results = load_data()
     ratings = build_team_ratings(matches, champions, teams_2026)
     cover_uri = image_data_uri(ASSETS_DIR / "copa-dados-cover.png")
 
@@ -918,21 +998,79 @@ def main():
 
     st.divider()
 
-    st.subheader("Jogos da fase de grupos")
-    display_fixtures = fixtures.copy()
-    display_fixtures["Jogo"] = (
-        display_fixtures["home_team"].map(team_label)
-        + " x "
-        + display_fixtures["away_team"].map(team_label)
-    )
-    display_fixtures = display_fixtures.rename(
-        columns={"date": "Data", "group": "Grupo", "matchday": "Rodada"}
-    )
-    st.dataframe(
-        display_fixtures[["Data", "Grupo", "Rodada", "Jogo"]],
-        use_container_width=True,
-        hide_index=True,
-    )
+    jogos_tab, acertos_tab = st.tabs(["Jogos da fase de grupos", "Acertos"])
+
+    with jogos_tab:
+        display_fixtures = fixtures.copy()
+        display_fixtures["Jogo"] = (
+            display_fixtures["home_team"].map(team_label)
+            + " x "
+            + display_fixtures["away_team"].map(team_label)
+        )
+        display_fixtures = display_fixtures.rename(
+            columns={"date": "Data", "group": "Grupo", "matchday": "Rodada"}
+        )
+        st.dataframe(
+            display_fixtures[["Data", "Grupo", "Rodada", "Jogo"]],
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    with acertos_tab:
+        st.subheader("Acertos da estatística")
+        st.write(
+            "Esta aba compara o palpite gerado pelo modelo estatístico com o resultado real de cada partida. "
+            "Preencha os placares reais em `data/world_cup_2026_results.csv` para atualizar as métricas."
+        )
+
+        tracking = build_tracking_table(fixtures, results, ratings)
+        finished = tracking[tracking["Status"] == "Finalizado"]
+        pending = tracking[tracking["Status"] == "Pendente"]
+
+        m1, m2, m3, m4 = st.columns(4)
+        with m1:
+            metric_card("Jogos finalizados", str(len(finished)))
+        with m2:
+            metric_card("Acerto do resultado", accuracy_rate(finished["_hit_result"]) if len(finished) else "0,0%")
+        with m3:
+            metric_card("Acerto do placar", accuracy_rate(finished["_hit_score"]) if len(finished) else "0,0%")
+        with m4:
+            metric_card("Jogos pendentes", str(len(pending)))
+
+        if finished.empty:
+            st.info(
+                "Ainda não há jogos com placar real preenchido. Assim que a Copa começar, atualize o CSV de resultados para acompanhar a taxa de acertos."
+            )
+        else:
+            detail_metrics = pd.DataFrame(
+                [
+                    {"Métrica": "Resultado 1X2", "Taxa de acerto": accuracy_rate(finished["_hit_result"])},
+                    {"Métrica": "Placar exato", "Taxa de acerto": accuracy_rate(finished["_hit_score"])},
+                    {"Métrica": "Acima de 2,5 gols", "Taxa de acerto": accuracy_rate(finished["_hit_goals"])},
+                    {"Métrica": "Ambos marcam", "Taxa de acerto": accuracy_rate(finished["_hit_both"])},
+                ]
+            )
+            st.dataframe(detail_metrics, use_container_width=True, hide_index=True)
+
+        st.dataframe(
+            tracking[
+                [
+                    "Data",
+                    "Grupo",
+                    "Jogo",
+                    "Palpite estatístico",
+                    "Confiança",
+                    "Prob. do palpite",
+                    "Placar previsto",
+                    "Placar real",
+                    "Acertou resultado",
+                    "Acertou placar",
+                    "Status",
+                ]
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
 
     st.caption(
         "Dados de seleções e grupos da Copa 2026 atualizados em maio de 2026 a partir do calendário oficial da FIFA e da consolidação pública da competição."

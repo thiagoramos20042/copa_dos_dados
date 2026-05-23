@@ -12,6 +12,7 @@ Aplicação Streamlit para analisar jogos da Copa do Mundo 2026 com base no hist
 - Mostra os placares mais prováveis por distribuição de Poisson.
 - Mostra bandeiras dos países e um card de palpite sugerido para bolão.
 - Projeta a classificação esperada do grupo com pontos, gols pró, gols contra e saldo.
+- Inclui a aba `Acertos`, que compara os palpites estatísticos com os placares reais e calcula taxa de acerto.
 
 ## Como executar
 
@@ -26,6 +27,7 @@ streamlit run main.py
 - `Campeoes.csv`: campeões e finalistas usados no rating.
 - `data/world_cup_2026_teams.csv`: seleções, grupos e confederações da Copa 2026.
 - `data/world_cup_2026_group_stage.csv`: calendário da fase de grupos 2026.
+- `data/world_cup_2026_results.csv`: placares reais usados para medir os acertos quando os jogos forem finalizados.
 
 Referências usadas para a atualização de 2026:
 
