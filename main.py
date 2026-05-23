@@ -630,6 +630,183 @@ def build_tracking_table(fixtures, results, ratings):
     return pd.DataFrame(rows)
 
 
+def match_result_label(goals_for, goals_against):
+    if goals_for > goals_against:
+        return "Vitória"
+    if goals_for < goals_against:
+        return "Derrota"
+    return "Empate"
+
+
+def recent_team_results(matches, team, limit=5):
+    normalized_team = normalize_team(team)
+    history = matches.copy()
+    history["home_norm"] = history["TimeDaCasa"].map(normalize_team)
+    history["away_norm"] = history["TimeVisitante"].map(normalize_team)
+    history = history[(history["home_norm"] == normalized_team) | (history["away_norm"] == normalized_team)].copy()
+    if history.empty:
+        return pd.DataFrame()
+
+    history["_order"] = history.index
+    history = history.sort_values(["Ano", "_order"], ascending=[False, False]).head(limit)
+
+    rows = []
+    for _, match in history.iterrows():
+        is_home = match["home_norm"] == normalized_team
+        opponent = match["away_norm"] if is_home else match["home_norm"]
+        goals_for = int(match["GolsTimeDaCasa"] if is_home else match["GolsTimeVisitante"])
+        goals_against = int(match["GolsTimeVisitante"] if is_home else match["GolsTimeDaCasa"])
+        home_goals = int(match["GolsTimeDaCasa"])
+        away_goals = int(match["GolsTimeVisitante"])
+
+        rows.append(
+            {
+                "Ano": int(match["Ano"]),
+                "Data": str(match["Data"]).strip(),
+                "Fase": match["Fase"],
+                "Adversário": team_label(opponent),
+                "Placar do jogo": f"{team_label(match['home_norm'])} {home_goals} x {away_goals} {team_label(match['away_norm'])}",
+                "Resultado": match_result_label(goals_for, goals_against),
+                "Gols pró": goals_for,
+                "Gols contra": goals_against,
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+def team_form_summary(recent_results):
+    if recent_results.empty:
+        return {"games": 0, "wins": 0, "draws": 0, "losses": 0, "goals_for": 0, "goals_against": 0, "form": "-"}
+
+    wins = int((recent_results["Resultado"] == "Vitória").sum())
+    draws = int((recent_results["Resultado"] == "Empate").sum())
+    losses = int((recent_results["Resultado"] == "Derrota").sum())
+    form_map = {"Vitória": "V", "Empate": "E", "Derrota": "D"}
+    return {
+        "games": len(recent_results),
+        "wins": wins,
+        "draws": draws,
+        "losses": losses,
+        "goals_for": int(recent_results["Gols pró"].sum()),
+        "goals_against": int(recent_results["Gols contra"].sum()),
+        "form": " ".join(recent_results["Resultado"].map(form_map)),
+    }
+
+
+def head_to_head_results(matches, home, away):
+    home_norm = normalize_team(home)
+    away_norm = normalize_team(away)
+    history = matches.copy()
+    history["home_norm"] = history["TimeDaCasa"].map(normalize_team)
+    history["away_norm"] = history["TimeVisitante"].map(normalize_team)
+    direct = history[
+        ((history["home_norm"] == home_norm) & (history["away_norm"] == away_norm))
+        | ((history["home_norm"] == away_norm) & (history["away_norm"] == home_norm))
+    ].copy()
+    if direct.empty:
+        return pd.DataFrame()
+
+    direct["_order"] = direct.index
+    direct = direct.sort_values(["Ano", "_order"], ascending=[False, False])
+    rows = []
+    for _, match in direct.iterrows():
+        rows.append(
+            {
+                "Ano": int(match["Ano"]),
+                "Data": str(match["Data"]).strip(),
+                "Fase": match["Fase"],
+                "Confronto": f"{team_label(match['home_norm'])} {int(match['GolsTimeDaCasa'])} x {int(match['GolsTimeVisitante'])} {team_label(match['away_norm'])}",
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def render_recent_results_page(matches, fixtures):
+    st.title("Últimos resultados das seleções")
+    st.write(
+        "Compare a forma recente em Copas das seleções que se enfrentam na fase de grupos de 2026."
+    )
+
+    group_options = ["Todos"] + sorted(fixtures["group"].unique())
+    selected_group = st.selectbox("Grupo", group_options, key="recent_group")
+    filtered_fixtures = fixtures.copy()
+    if selected_group != "Todos":
+        filtered_fixtures = filtered_fixtures[filtered_fixtures["group"] == selected_group]
+
+    fixture_labels = (
+        filtered_fixtures["date"]
+        + " | Grupo "
+        + filtered_fixtures["group"]
+        + " | "
+        + filtered_fixtures["home_team"].map(team_label)
+        + " x "
+        + filtered_fixtures["away_team"].map(team_label)
+    )
+    selected_label = st.selectbox("Jogo", fixture_labels, key="recent_match")
+    selected_match = filtered_fixtures.loc[fixture_labels == selected_label].iloc[0]
+    home = selected_match["home_team"]
+    away = selected_match["away_team"]
+
+    st.markdown(
+        f"""
+        <div class="match-strip">
+            <div class="team-name">{team_badge(home)}</div>
+            <div class="versus">Grupo {selected_match['group']}<br>{selected_match['date']}<br>Rodada {selected_match['matchday']}</div>
+            <div class="team-name">{team_badge(away)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    home_recent = recent_team_results(matches, home)
+    away_recent = recent_team_results(matches, away)
+    home_summary = team_form_summary(home_recent)
+    away_summary = team_form_summary(away_recent)
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        metric_card(f"Forma {team_label(home)}", home_summary["form"])
+    with c2:
+        metric_card("Campanha recente", f"{home_summary['wins']}V {home_summary['draws']}E {home_summary['losses']}D")
+    with c3:
+        metric_card(f"Forma {team_label(away)}", away_summary["form"])
+    with c4:
+        metric_card("Campanha recente", f"{away_summary['wins']}V {away_summary['draws']}E {away_summary['losses']}D")
+
+    g1, g2, g3, g4 = st.columns(4)
+    with g1:
+        metric_card(f"Gols pró {team_label(home)}", str(home_summary["goals_for"]))
+    with g2:
+        metric_card(f"Gols contra {team_label(home)}", str(home_summary["goals_against"]))
+    with g3:
+        metric_card(f"Gols pró {team_label(away)}", str(away_summary["goals_for"]))
+    with g4:
+        metric_card(f"Gols contra {team_label(away)}", str(away_summary["goals_against"]))
+
+    home_col, away_col = st.columns(2)
+    with home_col:
+        st.subheader(f"Últimos jogos de {team_label(home)}")
+        if home_recent.empty:
+            st.info("Não há jogos históricos dessa seleção na base.")
+        else:
+            st.dataframe(home_recent.drop(columns=["Gols pró", "Gols contra"]), use_container_width=True, hide_index=True)
+
+    with away_col:
+        st.subheader(f"Últimos jogos de {team_label(away)}")
+        if away_recent.empty:
+            st.info("Não há jogos históricos dessa seleção na base.")
+        else:
+            st.dataframe(away_recent.drop(columns=["Gols pró", "Gols contra"]), use_container_width=True, hide_index=True)
+
+    direct = head_to_head_results(matches, home, away)
+    st.subheader("Confrontos diretos em Copas")
+    if direct.empty:
+        st.info("Não há confronto direto entre essas seleções na base histórica de Copas.")
+    else:
+        st.dataframe(direct, use_container_width=True, hide_index=True)
+
+
 def accuracy_rate(series):
     if series.empty:
         return "0,0%"
@@ -1143,7 +1320,7 @@ def main():
     st.sidebar.title("Navegação")
     selected_page = st.sidebar.radio(
         "Página",
-        ["Análise dos jogos", "Estatísticas de acertos"],
+        ["Análise dos jogos", "Últimos resultados", "Estatísticas de acertos"],
         label_visibility="collapsed",
     )
 
@@ -1151,6 +1328,14 @@ def main():
         render_accuracy_dashboard(fixtures, results, ratings, results_source)
         st.caption(
             "Dados de seleções e grupos da Copa 2026 atualizados em maio de 2026 a partir do calendário oficial da FIFA e da consolidação pública da competição."
+        )
+        render_author_panel()
+        return
+
+    if selected_page == "Últimos resultados":
+        render_recent_results_page(matches, fixtures)
+        st.caption(
+            "Dados históricos baseados em jogos de Copas do Mundo; a lista mostra os jogos mais recentes disponíveis para cada seleção."
         )
         render_author_panel()
         return
