@@ -638,62 +638,6 @@ def match_result_label(goals_for, goals_against):
     return "Empate"
 
 
-def recent_team_results(matches, team, limit=5):
-    normalized_team = normalize_team(team)
-    history = matches.copy()
-    history["home_norm"] = history["TimeDaCasa"].map(normalize_team)
-    history["away_norm"] = history["TimeVisitante"].map(normalize_team)
-    history = history[(history["home_norm"] == normalized_team) | (history["away_norm"] == normalized_team)].copy()
-    if history.empty:
-        return pd.DataFrame()
-
-    history["_order"] = history.index
-    history = history.sort_values(["Ano", "_order"], ascending=[False, False]).head(limit)
-
-    rows = []
-    for _, match in history.iterrows():
-        is_home = match["home_norm"] == normalized_team
-        opponent = match["away_norm"] if is_home else match["home_norm"]
-        goals_for = int(match["GolsTimeDaCasa"] if is_home else match["GolsTimeVisitante"])
-        goals_against = int(match["GolsTimeVisitante"] if is_home else match["GolsTimeDaCasa"])
-        home_goals = int(match["GolsTimeDaCasa"])
-        away_goals = int(match["GolsTimeVisitante"])
-
-        rows.append(
-            {
-                "Ano": int(match["Ano"]),
-                "Data": str(match["Data"]).strip(),
-                "Fase": match["Fase"],
-                "Adversário": team_label(opponent),
-                "Placar do jogo": f"{team_label(match['home_norm'])} {home_goals} x {away_goals} {team_label(match['away_norm'])}",
-                "Resultado": match_result_label(goals_for, goals_against),
-                "Gols pró": goals_for,
-                "Gols contra": goals_against,
-            }
-        )
-
-    return pd.DataFrame(rows)
-
-
-def team_form_summary(recent_results):
-    if recent_results.empty:
-        return {"games": 0, "wins": 0, "draws": 0, "losses": 0, "goals_for": 0, "goals_against": 0, "form": "-"}
-
-    wins = int((recent_results["Resultado"] == "Vitória").sum())
-    draws = int((recent_results["Resultado"] == "Empate").sum())
-    losses = int((recent_results["Resultado"] == "Derrota").sum())
-    form_map = {"Vitória": "V", "Empate": "E", "Derrota": "D"}
-    return {
-        "games": len(recent_results),
-        "wins": wins,
-        "draws": draws,
-        "losses": losses,
-        "goals_for": int(recent_results["Gols pró"].sum()),
-        "goals_against": int(recent_results["Gols contra"].sum()),
-        "form": " ".join(recent_results["Resultado"].map(form_map)),
-    }
-
-
 def head_to_head_results(matches, home, away):
     home_norm = normalize_team(home)
     away_norm = normalize_team(away)
@@ -711,21 +655,26 @@ def head_to_head_results(matches, home, away):
     direct = direct.sort_values(["Ano", "_order"], ascending=[False, False])
     rows = []
     for _, match in direct.iterrows():
+        home_goals = int(match["GolsTimeDaCasa"])
+        away_goals = int(match["GolsTimeVisitante"])
+        winner = result_from_goals(home_goals, away_goals, match["home_norm"], match["away_norm"])
         rows.append(
             {
                 "Ano": int(match["Ano"]),
                 "Data": str(match["Data"]).strip(),
                 "Fase": match["Fase"],
-                "Confronto": f"{team_label(match['home_norm'])} {int(match['GolsTimeDaCasa'])} x {int(match['GolsTimeVisitante'])} {team_label(match['away_norm'])}",
+                "Jogo": f"{team_label(match['home_norm'])} x {team_label(match['away_norm'])}",
+                "Placar": f"{home_goals} x {away_goals}",
+                "Vencedor": team_label(winner) if winner != "Empate" else "Empate",
             }
         )
     return pd.DataFrame(rows)
 
 
 def render_recent_results_page(matches, fixtures):
-    st.title("Últimos resultados das seleções")
+    st.title("Confrontos diretos")
     st.write(
-        "Compare a forma recente em Copas das seleções que se enfrentam na fase de grupos de 2026."
+        "Veja se as seleções que se enfrentarão na fase de grupos já jogaram entre si em Copas, quando foi, qual foi o placar e quem venceu."
     )
 
     group_options = ["Todos"] + sorted(fixtures["group"].unique())
@@ -759,51 +708,27 @@ def render_recent_results_page(matches, fixtures):
         unsafe_allow_html=True,
     )
 
-    home_recent = recent_team_results(matches, home)
-    away_recent = recent_team_results(matches, away)
-    home_summary = team_form_summary(home_recent)
-    away_summary = team_form_summary(away_recent)
+    direct = head_to_head_results(matches, home, away)
+    status = "Nunca se enfrentaram" if direct.empty else "Já se enfrentaram"
+    home_wins = int((direct["Vencedor"] == team_label(home)).sum()) if not direct.empty else 0
+    away_wins = int((direct["Vencedor"] == team_label(away)).sum()) if not direct.empty else 0
+    draws = int((direct["Vencedor"] == "Empate").sum()) if not direct.empty else 0
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        metric_card(f"Forma {team_label(home)}", home_summary["form"])
+        metric_card("Status do confronto", status)
     with c2:
-        metric_card("Campanha recente", f"{home_summary['wins']}V {home_summary['draws']}E {home_summary['losses']}D")
+        metric_card("Jogos encontrados", str(len(direct)))
     with c3:
-        metric_card(f"Forma {team_label(away)}", away_summary["form"])
+        metric_card(f"Vitórias {team_label(home)}", str(home_wins))
     with c4:
-        metric_card("Campanha recente", f"{away_summary['wins']}V {away_summary['draws']}E {away_summary['losses']}D")
+        metric_card(f"Vitórias {team_label(away)}", str(away_wins))
 
-    g1, g2, g3, g4 = st.columns(4)
-    with g1:
-        metric_card(f"Gols pró {team_label(home)}", str(home_summary["goals_for"]))
-    with g2:
-        metric_card(f"Gols contra {team_label(home)}", str(home_summary["goals_against"]))
-    with g3:
-        metric_card(f"Gols pró {team_label(away)}", str(away_summary["goals_for"]))
-    with g4:
-        metric_card(f"Gols contra {team_label(away)}", str(away_summary["goals_against"]))
-
-    home_col, away_col = st.columns(2)
-    with home_col:
-        st.subheader(f"Últimos jogos de {team_label(home)}")
-        if home_recent.empty:
-            st.info("Não há jogos históricos dessa seleção na base.")
-        else:
-            st.dataframe(home_recent.drop(columns=["Gols pró", "Gols contra"]), use_container_width=True, hide_index=True)
-
-    with away_col:
-        st.subheader(f"Últimos jogos de {team_label(away)}")
-        if away_recent.empty:
-            st.info("Não há jogos históricos dessa seleção na base.")
-        else:
-            st.dataframe(away_recent.drop(columns=["Gols pró", "Gols contra"]), use_container_width=True, hide_index=True)
-
-    direct = head_to_head_results(matches, home, away)
-    st.subheader("Confrontos diretos em Copas")
     if direct.empty:
-        st.info("Não há confronto direto entre essas seleções na base histórica de Copas.")
+        st.warning("Nunca se enfrentaram em Copas do Mundo na base histórica disponível.")
     else:
+        metric_card("Empates", str(draws))
+        st.subheader("Histórico de jogos entre as seleções")
         st.dataframe(direct, use_container_width=True, hide_index=True)
 
 
@@ -1320,7 +1245,7 @@ def main():
     st.sidebar.title("Navegação")
     selected_page = st.sidebar.radio(
         "Página",
-        ["Análise dos jogos", "Últimos resultados", "Estatísticas de acertos"],
+        ["Análise dos jogos", "Confrontos diretos", "Estatísticas de acertos"],
         label_visibility="collapsed",
     )
 
@@ -1332,10 +1257,10 @@ def main():
         render_author_panel()
         return
 
-    if selected_page == "Últimos resultados":
+    if selected_page == "Confrontos diretos":
         render_recent_results_page(matches, fixtures)
         st.caption(
-            "Dados históricos baseados em jogos de Copas do Mundo; a lista mostra os jogos mais recentes disponíveis para cada seleção."
+            "Dados históricos baseados em jogos de Copas do Mundo; quando não houver jogo entre as duas seleções, a página sinaliza que elas nunca se enfrentaram na base."
         )
         render_author_panel()
         return
