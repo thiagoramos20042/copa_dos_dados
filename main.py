@@ -19,7 +19,7 @@ TEAM_ALIASES = {
     "rn\">United Arab Emirates": "United Arab Emirates",
     "rn\">Republic of Ireland": "Republic of Ireland",
     "Cote d'Ivoire": "Ivory Coast",
-    "CÃ´te d'Ivoire": "Ivory Coast",
+    "Côte d'Ivoire": "Ivory Coast",
     "rn\">Trinidad and Tobago": "Trinidad and Tobago",
     "rn\">Serbia and Montenegro": "Serbia and Montenegro",
     "rn\">Bosnia and Herzegovina": "Bosnia and Herzegovina",
@@ -338,7 +338,7 @@ def projected_group_table(group, fixtures, ratings):
     group_fixtures = fixtures[fixtures["group"] == group]
     teams = sorted(set(group_fixtures["home_team"]) | set(group_fixtures["away_team"]))
     table = {
-        team: {"SeleÃ§Ã£o": team_label(team), "PJ": 3, "Pts. esp.": 0.0, "GP esp.": 0.0, "GC esp.": 0.0}
+        team: {"Seleção": team_label(team), "PJ": 3, "Pts. esp.": 0.0, "GP esp.": 0.0, "GC esp.": 0.0}
         for team in teams
     }
 
@@ -373,7 +373,7 @@ def result_from_goals(home_goals, away_goals, home_team, away_team):
 
 
 def yes_no(value):
-    return "Sim" if value else "NÃ£o"
+    return "Sim" if value else "Não"
 
 
 def build_tracking_table(fixtures, results, ratings):
@@ -410,8 +410,8 @@ def build_tracking_table(fixtures, results, ratings):
                 "Data": match["date"],
                 "Grupo": match["group"],
                 "Jogo": f"{team_label(home)} x {team_label(away)}",
-                "Palpite estatÃ­stico": team_label(pick) if pick != "Empate" else "Empate",
-                "ConfianÃ§a": confidence,
+                "Palpite estatístico": team_label(pick) if pick != "Empate" else "Empate",
+                "Confiança": confidence,
                 "Prob. do palpite": pct(pick_probability),
                 "Placar previsto": score,
                 "Resultado real": team_label(actual_result) if actual_result not in [None, "Empate"] else actual_result or "Pendente",
@@ -459,7 +459,7 @@ def render_author_panel():
             </div>
             <a class="linkedin-cta" href="https://www.linkedin.com/in/thiago-ramos-oliveira/" target="_blank" rel="noopener noreferrer">
                 <span class="linkedin-logo">in</span>
-                Clique e conheÃ§a meu LinkedIn
+                Clique e conheça meu LinkedIn
             </a>
         </div>
         """,
@@ -468,11 +468,11 @@ def render_author_panel():
 
 
 def render_accuracy_dashboard(fixtures, results, ratings):
-    st.title("EstatÃ­sticas de acertos")
+    st.title("Estatísticas de acertos")
     st.write(
-        "Compare o que o modelo estatÃ­stico indicou antes dos jogos com o que aconteceu de fato. "
+        "Compare o que o modelo estatístico indicou antes dos jogos com o que aconteceu de fato. "
         "Quando os placares reais forem preenchidos no arquivo `data/world_cup_2026_results.csv`, "
-        "as mÃ©tricas abaixo serÃ£o atualizadas automaticamente."
+        "as métricas abaixo serão atualizadas automaticamente."
     )
 
     tracking = build_tracking_table(fixtures, results, ratings)
@@ -500,27 +500,27 @@ def render_accuracy_dashboard(fixtures, results, ratings):
         metric_card("Ambos marcam", accuracy_rate(finished["_hit_both"]) if len(finished) else "0,0%")
     with c8:
         avg_confidence = finished["_pick_probability"].mean() if len(finished) else np.nan
-        metric_card("ConfianÃ§a mÃ©dia", pct(avg_confidence).replace(".", ",") if len(finished) else "0,0%")
+        metric_card("Confiança média", pct(avg_confidence).replace(".", ",") if len(finished) else "0,0%")
 
     if finished.empty:
         st.info(
-            "Ainda nÃ£o hÃ¡ jogos finalizados na base. A Copa 2026 ainda nÃ£o comeÃ§ou; preencha os placares reais no CSV de resultados quando os jogos acontecerem."
+            "Ainda não há jogos finalizados na base. A Copa 2026 ainda não começou; preencha os placares reais no CSV de resultados quando os jogos acontecerem."
         )
     else:
         hit_rows = finished[finished["_hit_result"] == True]
         miss_rows = finished[finished["_hit_result"] == False]
         performance_summary = pd.DataFrame(
             [
-                {"MÃ©trica": "Resultado 1X2", "Taxa de acerto": accuracy_rate(finished["_hit_result"])},
-                {"MÃ©trica": "Placar exato", "Taxa de acerto": accuracy_rate(finished["_hit_score"])},
-                {"MÃ©trica": "Acima de 2,5 gols", "Taxa de acerto": accuracy_rate(finished["_hit_goals"])},
-                {"MÃ©trica": "Ambos marcam", "Taxa de acerto": accuracy_rate(finished["_hit_both"])},
+                    {"Métrica": "Resultado 1X2", "Taxa de acerto": accuracy_rate(finished["_hit_result"])},
+                    {"Métrica": "Placar exato", "Taxa de acerto": accuracy_rate(finished["_hit_score"])},
+                    {"Métrica": "Acima de 2,5 gols", "Taxa de acerto": accuracy_rate(finished["_hit_goals"])},
+                    {"Métrica": "Ambos marcam", "Taxa de acerto": accuracy_rate(finished["_hit_both"])},
                 {
-                    "MÃ©trica": "ConfianÃ§a mÃ©dia nos acertos",
+                    "Métrica": "Confiança média nos acertos",
                     "Taxa de acerto": pct(hit_rows["_pick_probability"].mean()).replace(".", ",") if len(hit_rows) else "0,0%",
                 },
                 {
-                    "MÃ©trica": "ConfianÃ§a mÃ©dia nos erros",
+                    "Métrica": "Confiança média nos erros",
                     "Taxa de acerto": pct(miss_rows["_pick_probability"].mean()).replace(".", ",") if len(miss_rows) else "0,0%",
                 },
             ]
@@ -552,26 +552,26 @@ def render_accuracy_dashboard(fixtures, results, ratings):
         st.dataframe(group_performance, use_container_width=True, hide_index=True)
 
         confidence_performance = (
-            finished.groupby("ConfianÃ§a", as_index=False)
+            finished.groupby("Confiança", as_index=False)
             .agg(
-                Jogos=("ConfianÃ§a", "size"),
+                Jogos=("Confiança", "size"),
                 Acerto_resultado=("_hit_result", "mean"),
                 Probabilidade_media=("_pick_probability", "mean"),
             )
             .rename(
                 columns={
                     "Acerto_resultado": "Acerto do resultado",
-                    "Probabilidade_media": "Probabilidade mÃ©dia do palpite",
+                    "Probabilidade_media": "Probabilidade média do palpite",
                 }
             )
         )
         confidence_performance["Acerto do resultado"] = confidence_performance["Acerto do resultado"].map(
             lambda value: pct(value).replace(".", ",")
         )
-        confidence_performance["Probabilidade mÃ©dia do palpite"] = confidence_performance[
-            "Probabilidade mÃ©dia do palpite"
+        confidence_performance["Probabilidade média do palpite"] = confidence_performance[
+            "Probabilidade média do palpite"
         ].map(lambda value: pct(value).replace(".", ","))
-        st.subheader("Desempenho por nÃ­vel de confianÃ§a")
+        st.subheader("Desempenho por nível de confiança")
         st.dataframe(confidence_performance, use_container_width=True, hide_index=True)
 
     st.subheader("Auditoria jogo a jogo")
@@ -581,8 +581,8 @@ def render_accuracy_dashboard(fixtures, results, ratings):
                 "Data",
                 "Grupo",
                 "Jogo",
-                "Palpite estatÃ­stico",
-                "ConfianÃ§a",
+                "Palpite estatístico",
+                "Confiança",
                 "Prob. do palpite",
                 "Placar previsto",
                 "Resultado real",
@@ -937,10 +937,10 @@ def main():
     st.markdown(
         f"""
         <div class="hero">
-            <img class="hero-img" src="{cover_uri}" alt="Capa com futebol e ciÃªncia de dados">
+            <img class="hero-img" src="{cover_uri}" alt="Capa com futebol e ciência de dados">
             <div class="hero-overlay"></div>
             <div class="hero-content">
-                <div class="hero-meta">Modelo estatÃ­stico para bolÃ£o</div>
+                <div class="hero-meta">Modelo estatístico para bolão</div>
                 <div class="hero-title">Copa dos Dados 2026</div>
             </div>
         </div>
@@ -948,17 +948,17 @@ def main():
         unsafe_allow_html=True,
     )
 
-    st.sidebar.title("NavegaÃ§Ã£o")
+    st.sidebar.title("Navegação")
     selected_page = st.sidebar.radio(
-        "PÃ¡gina",
-        ["AnÃ¡lise dos jogos", "EstatÃ­sticas de acertos"],
+        "Página",
+        ["Análise dos jogos", "Estatísticas de acertos"],
         label_visibility="collapsed",
     )
 
-    if selected_page == "EstatÃ­sticas de acertos":
+    if selected_page == "Estatísticas de acertos":
         render_accuracy_dashboard(fixtures, results, ratings)
         st.caption(
-            "Dados de seleÃ§Ãµes e grupos da Copa 2026 atualizados em maio de 2026 a partir do calendÃ¡rio oficial da FIFA e da consolidaÃ§Ã£o pÃºblica da competiÃ§Ã£o."
+            "Dados de seleções e grupos da Copa 2026 atualizados em maio de 2026 a partir do calendário oficial da FIFA e da consolidação pública da competição."
         )
         render_author_panel()
         return
@@ -1009,14 +1009,14 @@ def main():
         f"""
         <div class="decision-grid">
             <div class="decision-card primary">
-                <div class="card-label">Palpite do bolÃ£o</div>
+                <div class="card-label">Palpite do bolão</div>
                 <div class="card-value">{pick_badge}</div>
-                <div class="card-sub">{pct(pick_probability)} de probabilidade | confianÃ§a {confidence}</div>
+                <div class="card-sub">{pct(pick_probability)} de probabilidade | confiança {confidence}</div>
             </div>
             <div class="decision-card">
                 <div class="card-label">Placar modal</div>
                 <div class="card-value">{score}</div>
-                <div class="card-sub">Resultado mais provÃ¡vel na matriz de gols</div>
+                <div class="card-sub">Resultado mais provável na matriz de gols</div>
             </div>
             <div class="decision-card">
                 <div class="card-label">Gols esperados</div>
@@ -1038,12 +1038,12 @@ def main():
         st.markdown(
             f"""
             <div class="pick-card">
-                <div class="pick-label">RecomendaÃ§Ã£o estatÃ­stica</div>
+                <div class="pick-label">Recomendação estatística</div>
                 <div class="pick-main">{pick_label}</div>
                 <div class="pick-meta">Probabilidade do palpite: <strong>{pct(pick_probability)}</strong></div>
-                <div class="pick-meta">Placar mais provÃ¡vel: <strong>{score}</strong></div>
+                <div class="pick-meta">Placar mais provável: <strong>{score}</strong></div>
                 <div class="pick-meta" style="margin-top:10px;">
-                    Confianca:
+                    Confiança:
                     <span class="confidence-pill" style="background:{RESULT_COLORS[confidence]};">{confidence}</span>
                 </div>
             </div>
@@ -1055,11 +1055,11 @@ def main():
         st.subheader("Como ler o jogo")
         if pick == "Empate":
             st.write(
-                "O confronto aparece equilibrado no rating e na distribuiÃ§Ã£o de gols. Para bolÃ£o, o empate ganha peso quando a diferenÃ§a de forÃ§a Ã© pequena."
+                "O confronto aparece equilibrado no rating e na distribuição de gols. Para bolão, o empate ganha peso quando a diferença de força é pequena."
             )
         else:
             st.write(
-                f"{team_label(pick)} tem a maior probabilidade projetada, combinando rating histÃ³rico, forÃ§a ofensiva e gols esperados."
+                f"{team_label(pick)} tem a maior probabilidade projetada, combinando rating histórico, força ofensiva e gols esperados."
             )
         st.write(
             f"O modelo projeta **{expected_home + expected_away:.2f} gols** na partida, com placar modal **{score}**."
@@ -1069,11 +1069,11 @@ def main():
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        metric_card(f"VitÃ³ria {team_label(home)}", f"{probabilities['home']:.1%}")
+        metric_card(f"Vitória {team_label(home)}", f"{probabilities['home']:.1%}")
     with c2:
         metric_card("Empate", f"{probabilities['draw']:.1%}")
     with c3:
-        metric_card(f"VitÃ³ria {team_label(away)}", f"{probabilities['away']:.1%}")
+        metric_card(f"Vitória {team_label(away)}", f"{probabilities['away']:.1%}")
 
     st.divider()
 
@@ -1099,7 +1099,7 @@ def main():
         st.dataframe(goal_rows, use_container_width=True, hide_index=True)
 
     with score_col:
-        st.subheader("Placares mais provÃ¡veis")
+        st.subheader("Placares mais prováveis")
         scorelines = goals["scorelines"].copy()
         scorelines["Placar"] = (
             scorelines["home_goals"].astype(str)
@@ -1112,7 +1112,7 @@ def main():
         match_summary = pd.DataFrame(
             [
                 {
-                    "Selecao": team_label(home),
+                    "Seleção": team_label(home),
                     "Rating": float(ratings.loc[ratings["team"] == home, "rating"].iloc[0]),
                     "Gols pro/jogo": float(
                         ratings.loc[ratings["team"] == home, "goals_for_per_match"].iloc[0]
@@ -1122,7 +1122,7 @@ def main():
                     ),
                 },
                 {
-                    "Selecao": team_label(away),
+                    "Seleção": team_label(away),
                     "Rating": float(ratings.loc[ratings["team"] == away, "rating"].iloc[0]),
                     "Gols pro/jogo": float(
                         ratings.loc[ratings["team"] == away, "goals_for_per_match"].iloc[0]
@@ -1137,7 +1137,7 @@ def main():
 
     st.divider()
 
-    st.subheader(f"ProjeÃ§Ã£o do Grupo {selected_match['group']}")
+    st.subheader(f"Projeção do Grupo {selected_match['group']}")
     st.dataframe(
         projected_group_table(selected_match["group"], fixtures, ratings),
         use_container_width=True,
@@ -1189,7 +1189,7 @@ def main():
         )
 
     st.caption(
-        "Dados de seleÃ§Ãµes e grupos da Copa 2026 atualizados em maio de 2026 a partir do calendÃ¡rio oficial da FIFA e da consolidaÃ§Ã£o pÃºblica da competiÃ§Ã£o."
+        "Dados de seleções e grupos da Copa 2026 atualizados em maio de 2026 a partir do calendário oficial da FIFA e da consolidação pública da competição."
     )
 
     st.markdown(
@@ -1201,7 +1201,7 @@ def main():
             </div>
             <a class="linkedin-cta" href="https://www.linkedin.com/in/thiago-ramos-oliveira/" target="_blank" rel="noopener noreferrer">
                 <span class="linkedin-logo">in</span>
-                Clique e conheÃ§a meu LinkedIn
+                Clique e conheça meu LinkedIn
             </a>
         </div>
         """,
