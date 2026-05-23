@@ -31,7 +31,13 @@ streamlit run main.py
 
 ## Resultados via API
 
-A página `Estatísticas de acertos` pode buscar placares reais diretamente de uma API. No Streamlit Cloud, configure em **Settings > Secrets**:
+A página `Estatísticas de acertos` busca placares reais diretamente da API pública do projeto `openfootball/worldcup.json`, sem necessidade de chave:
+
+```text
+https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json
+```
+
+Se quiser trocar por uma API privada ou comercial, configure no Streamlit Cloud em **Settings > Secrets**:
 
 ```toml
 RESULTS_API_URL = "https://sua-api.com/world-cup-2026/results"

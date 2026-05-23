@@ -15,6 +15,7 @@ BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
 ASSETS_DIR = BASE_DIR / "assets"
 RESULTS_COLUMNS = ["match_id", "actual_home_goals", "actual_away_goals", "status", "notes"]
+DEFAULT_RESULTS_API_URL = "https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json"
 
 TEAM_ALIASES = {
     "USA": "United States",
@@ -145,7 +146,7 @@ def load_data():
     champions = pd.read_csv(BASE_DIR / "Campeoes.csv")
     teams_2026 = pd.read_csv(DATA_DIR / "world_cup_2026_teams.csv")
     fixtures = pd.read_csv(DATA_DIR / "world_cup_2026_group_stage.csv")
-    results, results_source = load_results()
+    results, results_source = load_results(fixtures)
     return matches, champions, teams_2026, fixtures, results, results_source
 
 
@@ -197,6 +198,52 @@ def nested_score(record, side):
         value = record.get(key)
         if isinstance(value, dict) and value.get(side) not in [None, ""]:
             return value.get(side)
+        if isinstance(value, dict) and isinstance(value.get("ft"), list) and len(value["ft"]) >= 2:
+            return value["ft"][0] if side == "home" else value["ft"][1]
+    return None
+
+
+def api_team_name(value):
+    if isinstance(value, dict):
+        return first_available(value, ["name", "label", "country", "team", "title"])
+    return value
+
+
+def team_match_key(value):
+    if value in [None, ""]:
+        return ""
+
+    normalized = normalize_team(str(value))
+    return "".join(char.lower() for char in normalized if char.isalnum())
+
+
+def match_id_from_api_record(record, index, fixtures):
+    match_id = first_available(record, ["match_id", "id", "fixture_id", "game_id", "match_number", "num"])
+    if match_id not in [None, ""]:
+        return match_id
+
+    if fixtures is None or fixtures.empty:
+        return None
+
+    home_team = api_team_name(first_available(record, ["home_team", "homeTeam", "home", "team1"]))
+    away_team = api_team_name(first_available(record, ["away_team", "awayTeam", "away", "team2"]))
+    match_date = first_available(record, ["date", "match_date", "kickoff_date"])
+
+    if home_team and away_team:
+        candidates = fixtures[
+            (fixtures["home_team"].map(team_match_key) == team_match_key(home_team))
+            & (fixtures["away_team"].map(team_match_key) == team_match_key(away_team))
+        ]
+        if match_date:
+            dated_candidates = candidates[candidates["date"].astype(str) == str(match_date)[:10]]
+            if not dated_candidates.empty:
+                return dated_candidates.iloc[0]["match_id"]
+        if not candidates.empty:
+            return candidates.iloc[0]["match_id"]
+
+    if index < len(fixtures):
+        return fixtures.iloc[index]["match_id"]
+
     return None
 
 
@@ -205,6 +252,22 @@ def records_from_payload(payload):
         return payload
 
     if isinstance(payload, dict):
+        rounds = payload.get("rounds")
+        if isinstance(rounds, list):
+            records = []
+            for round_data in rounds:
+                if not isinstance(round_data, dict):
+                    continue
+                matches = round_data.get("matches", [])
+                if not isinstance(matches, list):
+                    continue
+                for match in matches:
+                    if isinstance(match, dict):
+                        match = match.copy()
+                        match["round"] = round_data.get("name", "")
+                        records.append(match)
+            return records
+
         for key in ["results", "matches", "fixtures", "data", "response"]:
             value = payload.get(key)
             if isinstance(value, list):
@@ -213,15 +276,15 @@ def records_from_payload(payload):
     return []
 
 
-def normalize_api_records(records):
+def normalize_api_records(records, fixtures=None):
     rows = []
-    for record in records:
+    for index, record in enumerate(records):
         if not isinstance(record, dict):
             continue
 
-        match_id = first_available(record, ["match_id", "id", "fixture_id", "game_id"])
-        home_goals = first_available(record, ["actual_home_goals", "home_goals", "home_score", "score_home", "homeTeamScore", "goals_home"])
-        away_goals = first_available(record, ["actual_away_goals", "away_goals", "away_score", "score_away", "awayTeamScore", "goals_away"])
+        match_id = match_id_from_api_record(record, index, fixtures)
+        home_goals = first_available(record, ["actual_home_goals", "home_goals", "home_score", "score_home", "homeTeamScore", "goals_home", "score1"])
+        away_goals = first_available(record, ["actual_away_goals", "away_goals", "away_score", "score_away", "awayTeamScore", "goals_away", "score2"])
 
         if home_goals is None:
             home_goals = nested_score(record, "home")
@@ -248,8 +311,8 @@ def normalize_api_records(records):
     return normalize_results(pd.DataFrame(rows))
 
 
-def fetch_results_from_api():
-    url = get_config_value("RESULTS_API_URL")
+def fetch_results_from_api(fixtures=None):
+    url = get_config_value("RESULTS_API_URL", DEFAULT_RESULTS_API_URL)
     if not url:
         return pd.DataFrame(columns=RESULTS_COLUMNS), "CSV local"
 
@@ -267,16 +330,17 @@ def fetch_results_from_api():
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
         return pd.DataFrame(columns=RESULTS_COLUMNS), "CSV local"
 
-    api_results = normalize_api_records(records_from_payload(payload))
+    api_results = normalize_api_records(records_from_payload(payload), fixtures)
     if api_results.empty:
         return pd.DataFrame(columns=RESULTS_COLUMNS), "CSV local"
 
-    return api_results, "API"
+    source = "API pública OpenFootball" if url == DEFAULT_RESULTS_API_URL else "API"
+    return api_results, source
 
 
-def load_results():
+def load_results(fixtures=None):
     local_results = read_local_results()
-    api_results, source = fetch_results_from_api()
+    api_results, source = fetch_results_from_api(fixtures)
     if api_results.empty:
         return local_results, "CSV local"
 
@@ -649,7 +713,7 @@ def render_accuracy_dashboard(fixtures, results, ratings, results_source):
 
     if finished.empty:
         st.info(
-            "Ainda não há jogos finalizados na base. A Copa 2026 ainda não começou; preencha os placares reais no CSV de resultados quando os jogos acontecerem."
+            "Ainda não há jogos finalizados na base. A Copa 2026 ainda não começou; a aplicação buscará os placares pela API pública configurada e manterá o CSV local apenas como fallback."
         )
     else:
         hit_rows = finished[finished["_hit_result"] == True]
