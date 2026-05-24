@@ -992,6 +992,65 @@ def render_author_panel():
     )
 
 
+PAGE_DETAILS = {
+    "Análise dos jogos": {
+        "meta": "Probabilidades, gols e palpite para bolão",
+        "title": "Análise dos jogos",
+        "copy": "Escolha um confronto da fase de grupos e veja o palpite estatístico, gols esperados, placares prováveis e leitura tática para o bolão.",
+    },
+    "Confrontos diretos": {
+        "meta": "Histórico entre seleções",
+        "title": "Confrontos diretos",
+        "copy": "Descubra se duas seleções já se enfrentaram em Copas, quando foi o jogo, quanto terminou e quem venceu.",
+    },
+    "Mata-mata": {
+        "meta": "Simulador da chave decisiva",
+        "title": "Mata-mata projetado",
+        "copy": "Veja a rota estimada da Fase de 32 até a final, com classificados projetados, placares prováveis e campeão previsto.",
+    },
+    "Estatísticas de acertos": {
+        "meta": "Auditoria do modelo",
+        "title": "Estatísticas de acertos",
+        "copy": "Compare as previsões do modelo com os resultados reais vindos da API e acompanhe a taxa de acerto por métrica.",
+    },
+}
+
+
+def render_hero(cover_uri, selected_page):
+    page = PAGE_DETAILS[selected_page]
+    st.markdown(
+        f"""
+        <div class="hero">
+            <img class="hero-img" src="{cover_uri}" alt="Capa com futebol e ciência de dados">
+            <div class="hero-overlay"></div>
+            <div class="hero-content">
+                <div class="hero-meta">{page['meta']}</div>
+                <div class="hero-title">Copa dos Dados 2026</div>
+                <div class="hero-copy">{page['copy']}</div>
+            </div>
+            <div class="hero-scorecard">
+                <span>Experiência ativa</span>
+                <strong>{page['title']}</strong>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    cards = []
+    for page_name, details in PAGE_DETAILS.items():
+        active_class = " active" if page_name == selected_page else ""
+        cards.append(
+            f"""
+            <div class="nav-card{active_class}">
+                <span>{details['meta']}</span>
+                <strong>{page_name}</strong>
+            </div>
+            """
+        )
+    st.markdown(f"<div class='nav-card-grid'>{''.join(cards)}</div>", unsafe_allow_html=True)
+
+
 def render_accuracy_dashboard(fixtures, results, ratings, results_source):
     st.title("Estatísticas de acertos")
     st.write(
@@ -1128,20 +1187,30 @@ def apply_theme():
         """
         <style>
             :root {
-                --ink: #101828;
-                --muted: #667085;
-                --line: #d0d5dd;
+                --ink: #07111f;
+                --muted: #526070;
+                --line: #c9d6e4;
                 --surface: #ffffff;
-                --surface-soft: #f8fafc;
-                --green: #067647;
-                --blue: #175cd3;
-                --gold: #b54708;
-                --red: #b42318;
+                --surface-soft: #f5f8fc;
+                --green: #00a86b;
+                --blue: #0057ff;
+                --gold: #ffb000;
+                --red: #ef3340;
+                --cyan: #00c2ff;
+                --navy: #071827;
+            }
+
+            .stApp {
+                background:
+                    linear-gradient(135deg, rgba(0, 87, 255, .08), rgba(0, 194, 255, 0) 34%),
+                    linear-gradient(315deg, rgba(0, 168, 107, .10), rgba(255, 176, 0, .06) 38%, rgba(255, 255, 255, 0) 66%),
+                    #f7fbff;
             }
 
             .main .block-container {
-                padding-top: 2rem;
-                max-width: 1220px;
+                max-width: 1260px;
+                padding-bottom: 3rem;
+                padding-top: 1.15rem;
             }
 
             h1, h2, h3 {
@@ -1149,19 +1218,69 @@ def apply_theme():
                 letter-spacing: 0;
             }
 
+            h1 {
+                font-size: 30px;
+                font-weight: 850;
+                margin-top: 4px;
+            }
+
+            h2, h3 {
+                font-weight: 800;
+            }
+
             [data-testid="stSidebar"] {
-                background: #f7fafc;
-                border-right: 1px solid var(--line);
+                background:
+                    linear-gradient(180deg, rgba(0, 87, 255, .08), rgba(0, 168, 107, .07)),
+                    #ffffff;
+                border-right: 1px solid rgba(7, 24, 39, .10);
+            }
+
+            div[role="radiogroup"] {
+                background: rgba(255, 255, 255, .78);
+                border: 1px solid rgba(7, 24, 39, .10);
+                border-radius: 8px;
+                box-shadow: 0 16px 42px rgba(7, 24, 39, .08);
+                display: flex;
+                gap: 8px;
+                padding: 8px;
+            }
+
+            div[role="radiogroup"] label {
+                border-radius: 8px;
+                margin: 0;
+                padding: 8px 12px;
+            }
+
+            div[role="radiogroup"] label:has(input:checked) {
+                background: linear-gradient(135deg, var(--blue), var(--green));
+                color: #ffffff;
+                box-shadow: 0 10px 24px rgba(0, 87, 255, .22);
+            }
+
+            div[role="radiogroup"] label:has(input:checked) p,
+            div[role="radiogroup"] label:has(input:checked) span {
+                color: #ffffff !important;
             }
 
             .hero {
-                border: 1px solid var(--line);
-                background: #071827;
-                min-height: 285px;
+                border: 1px solid rgba(255, 255, 255, .42);
+                background: var(--navy);
+                box-shadow: 0 24px 70px rgba(7, 24, 39, .22);
+                min-height: 330px;
                 border-radius: 8px;
-                margin-bottom: 20px;
+                margin: 16px 0 14px;
                 overflow: hidden;
                 position: relative;
+            }
+
+            .hero:after {
+                background: linear-gradient(90deg, var(--green), var(--gold), var(--red), var(--blue));
+                bottom: 0;
+                content: "";
+                height: 5px;
+                left: 0;
+                position: absolute;
+                right: 0;
             }
 
             .hero-img {
@@ -1173,38 +1292,112 @@ def apply_theme():
             }
 
             .hero-overlay {
-                background: linear-gradient(90deg, rgba(6, 24, 38, .94) 0%, rgba(6, 24, 38, .74) 48%, rgba(6, 24, 38, .18) 100%);
+                background:
+                    linear-gradient(90deg, rgba(7, 17, 31, .96) 0%, rgba(7, 17, 31, .78) 45%, rgba(7, 17, 31, .18) 100%),
+                    linear-gradient(135deg, rgba(0, 87, 255, .50), rgba(0, 168, 107, .22) 45%, rgba(255, 176, 0, .16));
                 inset: 0;
                 position: absolute;
             }
 
             .hero-content {
-                padding: 32px 34px;
+                padding: 42px 38px;
                 position: relative;
                 z-index: 1;
             }
 
             .hero-title {
-                font-size: 34px;
-                font-weight: 750;
+                font-size: 44px;
+                font-weight: 900;
                 color: #ffffff;
-                margin-bottom: 6px;
+                line-height: 1.02;
+                margin-bottom: 12px;
                 max-width: 620px;
             }
 
             .hero-copy {
-                color: rgba(255, 255, 255, .82);
-                font-size: 16px;
-                max-width: 760px;
+                color: rgba(255, 255, 255, .86);
+                font-size: 17px;
+                line-height: 1.5;
+                max-width: 670px;
             }
 
             .hero-meta {
-                color: #a7f3d0;
+                color: #c8ff4d;
                 font-size: 13px;
-                font-weight: 750;
+                font-weight: 850;
                 letter-spacing: .06em;
-                margin-bottom: 8px;
+                margin-bottom: 10px;
                 text-transform: uppercase;
+            }
+
+            .hero-scorecard {
+                background: rgba(255, 255, 255, .92);
+                border: 1px solid rgba(255, 255, 255, .72);
+                border-radius: 8px;
+                bottom: 28px;
+                box-shadow: 0 18px 50px rgba(0, 0, 0, .24);
+                min-width: 245px;
+                padding: 16px 18px;
+                position: absolute;
+                right: 28px;
+                z-index: 2;
+            }
+
+            .hero-scorecard span {
+                color: var(--muted);
+                display: block;
+                font-size: 12px;
+                font-weight: 800;
+                margin-bottom: 6px;
+                text-transform: uppercase;
+            }
+
+            .hero-scorecard strong {
+                color: var(--ink);
+                font-size: 22px;
+                line-height: 1.1;
+            }
+
+            .nav-card-grid {
+                display: grid;
+                gap: 12px;
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+                margin: 0 0 18px;
+            }
+
+            .nav-card {
+                background: rgba(255, 255, 255, .82);
+                border: 1px solid rgba(7, 24, 39, .10);
+                border-radius: 8px;
+                box-shadow: 0 14px 35px rgba(7, 24, 39, .07);
+                min-height: 86px;
+                padding: 14px 16px;
+            }
+
+            .nav-card span {
+                color: var(--muted);
+                display: block;
+                font-size: 11px;
+                font-weight: 800;
+                margin-bottom: 7px;
+                text-transform: uppercase;
+            }
+
+            .nav-card strong {
+                color: var(--ink);
+                display: block;
+                font-size: 17px;
+                line-height: 1.15;
+            }
+
+            .nav-card.active {
+                background: linear-gradient(135deg, #071827, #0b3b7a 58%, #0057ff);
+                border-color: rgba(255, 255, 255, .28);
+            }
+
+            .nav-card.active span,
+            .nav-card.active strong {
+                color: #ffffff;
             }
 
             .match-strip {
@@ -1212,11 +1405,14 @@ def apply_theme():
                 align-items: center;
                 justify-content: space-between;
                 gap: 16px;
-                border: 1px solid var(--line);
+                border: 1px solid rgba(7, 24, 39, .10);
                 border-radius: 8px;
-                padding: 18px 20px;
-                background: var(--surface);
-                margin: 12px 0 18px;
+                box-shadow: 0 16px 38px rgba(7, 24, 39, .08);
+                padding: 20px 22px;
+                background:
+                    linear-gradient(90deg, rgba(0, 168, 107, .11), rgba(255, 255, 255, .92) 32%, rgba(0, 87, 255, .10)),
+                    var(--surface);
+                margin: 14px 0 18px;
             }
 
             .team-name {
@@ -1237,8 +1433,12 @@ def apply_theme():
             }
 
             .versus {
-                color: var(--muted);
+                background: #071827;
+                border-radius: 8px;
+                color: #ffffff;
                 font-size: 13px;
+                font-weight: 800;
+                padding: 10px 14px;
                 text-align: center;
                 text-transform: uppercase;
                 letter-spacing: .08em;
@@ -1252,16 +1452,17 @@ def apply_theme():
             }
 
             .decision-card {
-                border: 1px solid var(--line);
+                border: 1px solid rgba(7, 24, 39, .10);
                 border-radius: 8px;
-                background: var(--surface);
+                background: rgba(255, 255, 255, .88);
+                box-shadow: 0 16px 34px rgba(7, 24, 39, .07);
                 padding: 16px 18px;
                 min-height: 124px;
             }
 
             .decision-card.primary {
-                background: #063f2f;
-                border-color: #063f2f;
+                background: linear-gradient(135deg, #003f2f, var(--green));
+                border-color: rgba(0, 168, 107, .55);
                 color: #ffffff;
             }
 
@@ -1297,10 +1498,13 @@ def apply_theme():
             }
 
             .pick-card {
-                border: 1px solid var(--line);
-                border-left: 5px solid var(--green);
+                border: 1px solid rgba(0, 168, 107, .25);
+                border-left: 6px solid var(--green);
                 border-radius: 8px;
-                background: var(--surface);
+                background:
+                    linear-gradient(135deg, rgba(0, 168, 107, .12), rgba(255, 255, 255, .92)),
+                    var(--surface);
+                box-shadow: 0 16px 34px rgba(7, 24, 39, .08);
                 padding: 18px 20px;
                 min-height: 154px;
             }
@@ -1337,20 +1541,53 @@ def apply_theme():
             }
 
             div[data-testid="stMetric"] {
-                border: 1px solid var(--line);
-                background: var(--surface);
-                padding: 14px 16px;
+                border: 1px solid rgba(7, 24, 39, .10);
+                background:
+                    linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(245, 248, 252, .92));
+                box-shadow: 0 14px 30px rgba(7, 24, 39, .07);
+                padding: 15px 16px;
                 border-radius: 8px;
             }
 
             div[data-testid="stMetricLabel"] {
                 color: var(--muted);
+                font-weight: 800;
+            }
+
+            div[data-testid="stMetricValue"] {
+                color: var(--ink);
+                font-weight: 900;
+            }
+
+            div[data-testid="stDataFrame"] {
+                border: 1px solid rgba(7, 24, 39, .10);
+                border-radius: 8px;
+                box-shadow: 0 14px 30px rgba(7, 24, 39, .06);
+                overflow: hidden;
+            }
+
+            .stTabs [data-baseweb="tab-list"] {
+                gap: 8px;
+            }
+
+            .stTabs [data-baseweb="tab"] {
+                background: rgba(255, 255, 255, .84);
+                border: 1px solid rgba(7, 24, 39, .10);
+                border-radius: 8px;
+                font-weight: 800;
+                padding: 8px 14px;
+            }
+
+            .stTabs [aria-selected="true"] {
+                background: linear-gradient(135deg, var(--red), var(--gold));
+                color: #071827;
             }
 
             .author-panel {
                 align-items: center;
-                background: #101828;
+                background: linear-gradient(135deg, #071827, #102a43 58%, #0057ff);
                 border-radius: 8px;
+                box-shadow: 0 18px 45px rgba(7, 24, 39, .18);
                 color: #ffffff;
                 display: flex;
                 gap: 18px;
@@ -1372,7 +1609,7 @@ def apply_theme():
 
             .linkedin-cta {
                 align-items: center;
-                background: #0a66c2;
+                background: linear-gradient(135deg, #0a66c2, #00c2ff);
                 border-radius: 8px;
                 color: #ffffff !important;
                 display: inline-flex;
@@ -1400,6 +1637,15 @@ def apply_theme():
                 .decision-grid {
                     grid-template-columns: repeat(2, minmax(0, 1fr));
                 }
+                .nav-card-grid {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+                .hero-scorecard {
+                    bottom: auto;
+                    left: 24px;
+                    right: 24px;
+                    top: 210px;
+                }
                 .match-strip {
                     align-items: flex-start;
                     flex-direction: column;
@@ -1409,6 +1655,23 @@ def apply_theme():
                 }
                 .author-panel {
                     align-items: flex-start;
+                    flex-direction: column;
+                }
+            }
+
+            @media (max-width: 640px) {
+                .hero {
+                    min-height: 390px;
+                }
+                .hero-title {
+                    font-size: 34px;
+                }
+                .nav-card-grid,
+                .decision-grid {
+                    grid-template-columns: 1fr;
+                }
+                div[role="radiogroup"] {
+                    align-items: stretch;
                     flex-direction: column;
                 }
             }
@@ -1458,26 +1721,14 @@ def main():
     ratings = build_team_ratings(matches, champions, teams_2026)
     cover_uri = image_data_uri(ASSETS_DIR / "copa-dados-cover.png")
 
-    st.markdown(
-        f"""
-        <div class="hero">
-            <img class="hero-img" src="{cover_uri}" alt="Capa com futebol e ciência de dados">
-            <div class="hero-overlay"></div>
-            <div class="hero-content">
-                <div class="hero-meta">Modelo estatístico para bolão</div>
-                <div class="hero-title">Copa dos Dados 2026</div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.sidebar.title("Navegação")
-    selected_page = st.sidebar.radio(
-        "Página",
-        ["Análise dos jogos", "Confrontos diretos", "Mata-mata", "Estatísticas de acertos"],
+    selected_page = st.radio(
+        "Navegação principal",
+        list(PAGE_DETAILS.keys()),
+        horizontal=True,
         label_visibility="collapsed",
+        key="primary_navigation",
     )
+    render_hero(cover_uri, selected_page)
 
     if selected_page == "Estatísticas de acertos":
         render_accuracy_dashboard(fixtures, results, ratings, results_source)
