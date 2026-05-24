@@ -555,6 +555,170 @@ def projected_group_table(group, fixtures, ratings):
     return projection.sort_values(["Pts. esp.", "SG esp.", "GP esp."], ascending=False)
 
 
+def projected_group_table_raw(group, fixtures, ratings):
+    group_fixtures = fixtures[fixtures["group"] == group]
+    teams = sorted(set(group_fixtures["home_team"]) | set(group_fixtures["away_team"]))
+    table = {
+        team: {"Grupo": group, "team": team, "PJ": 3, "Pts. esp.": 0.0, "GP esp.": 0.0, "GC esp.": 0.0}
+        for team in teams
+    }
+
+    for _, match in group_fixtures.iterrows():
+        home = match["home_team"]
+        away = match["away_team"]
+        probabilities = match_probabilities(home, away, ratings)
+        expected_home, expected_away = estimate_goals(home, away, ratings)
+
+        table[home]["Pts. esp."] += probabilities["home"] * 3 + probabilities["draw"]
+        table[away]["Pts. esp."] += probabilities["away"] * 3 + probabilities["draw"]
+        table[home]["GP esp."] += expected_home
+        table[home]["GC esp."] += expected_away
+        table[away]["GP esp."] += expected_away
+        table[away]["GC esp."] += expected_home
+
+    projection = pd.DataFrame(table.values())
+    projection["SG esp."] = projection["GP esp."] - projection["GC esp."]
+    projection = projection.sort_values(["Pts. esp.", "SG esp.", "GP esp."], ascending=False).reset_index(drop=True)
+    projection["Posição"] = projection.index + 1
+    numeric_cols = ["Pts. esp.", "GP esp.", "GC esp.", "SG esp."]
+    projection[numeric_cols] = projection[numeric_cols].round(2)
+    return projection
+
+
+def projected_group_positions(fixtures, ratings):
+    groups = sorted(fixtures["group"].unique())
+    rankings = pd.concat(
+        [projected_group_table_raw(group, fixtures, ratings) for group in groups],
+        ignore_index=True,
+    )
+
+    positions = {}
+    for _, row in rankings.iterrows():
+        positions[(row["Grupo"], int(row["Posição"]))] = row.to_dict()
+
+    third_pool = rankings[rankings["Posição"] == 3].sort_values(
+        ["Pts. esp.", "SG esp.", "GP esp."],
+        ascending=False,
+    )
+    qualified_thirds = third_pool.head(8).copy()
+    return rankings, positions, qualified_thirds
+
+
+ROUND_OF_32_TEMPLATE = [
+    (73, ("2", "A"), ("2", "B")),
+    (74, ("1", "E"), ("3", ["A", "B", "C", "D", "F"])),
+    (75, ("1", "F"), ("2", "C")),
+    (76, ("1", "C"), ("2", "F")),
+    (77, ("1", "I"), ("3", ["C", "D", "F", "G", "H"])),
+    (78, ("2", "E"), ("2", "I")),
+    (79, ("1", "A"), ("3", ["C", "E", "F", "H", "I"])),
+    (80, ("1", "L"), ("3", ["E", "H", "I", "J", "K"])),
+    (81, ("1", "D"), ("3", ["B", "E", "F", "I", "J"])),
+    (82, ("1", "G"), ("3", ["A", "E", "H", "I", "J"])),
+    (83, ("2", "K"), ("2", "L")),
+    (84, ("1", "H"), ("2", "J")),
+    (85, ("1", "B"), ("3", ["E", "F", "G", "I", "J"])),
+    (86, ("1", "J"), ("2", "H")),
+    (87, ("1", "K"), ("3", ["D", "E", "I", "J", "L"])),
+    (88, ("2", "D"), ("2", "G")),
+]
+
+KNOCKOUT_FLOW = [
+    ("Oitavas de final", 89, 73, 75),
+    ("Oitavas de final", 90, 74, 77),
+    ("Oitavas de final", 91, 76, 78),
+    ("Oitavas de final", 92, 79, 80),
+    ("Oitavas de final", 93, 83, 84),
+    ("Oitavas de final", 94, 81, 82),
+    ("Oitavas de final", 95, 86, 88),
+    ("Oitavas de final", 96, 85, 87),
+    ("Quartas de final", 97, 89, 90),
+    ("Quartas de final", 98, 93, 94),
+    ("Quartas de final", 99, 91, 92),
+    ("Quartas de final", 100, 95, 96),
+    ("Semifinal", 101, 97, 98),
+    ("Semifinal", 102, 99, 100),
+    ("Final", 104, 101, 102),
+]
+
+
+def knockout_slot_team(slot, positions, qualified_thirds, used_thirds):
+    position, group_ref = slot
+    if position in ["1", "2"]:
+        row = positions.get((group_ref, int(position)))
+        label = f"{position}º Grupo {group_ref}"
+        return row["team"], label
+
+    candidates = group_ref
+    available = qualified_thirds[
+        qualified_thirds["Grupo"].isin(candidates) & ~qualified_thirds["Grupo"].isin(used_thirds)
+    ]
+    if available.empty:
+        available = qualified_thirds[~qualified_thirds["Grupo"].isin(used_thirds)]
+    if available.empty:
+        return "A definir", f"3º melhor ({'/'.join(candidates)})"
+
+    row = available.iloc[0]
+    used_thirds.add(row["Grupo"])
+    return row["team"], f"3º Grupo {row['Grupo']}"
+
+
+def predicted_knockout_winner(team_a, team_b, ratings):
+    if "A definir" in [team_a, team_b]:
+        return "A definir", np.nan, "-"
+
+    probabilities = match_probabilities(team_a, team_b, ratings)
+    home_share = probabilities["home"] / (probabilities["home"] + probabilities["away"])
+    winner = team_a if probabilities["home"] >= probabilities["away"] else team_b
+    winner_probability = home_share if winner == team_a else 1 - home_share
+    expected_home, expected_away = estimate_goals(team_a, team_b, ratings)
+    goals = goal_markets(expected_home, expected_away)
+    best_score = goals["scorelines"].iloc[0]
+    score = f"{int(best_score['home_goals'])} x {int(best_score['away_goals'])}"
+    return winner, winner_probability, score
+
+
+def build_knockout_projection(fixtures, ratings):
+    rankings, positions, qualified_thirds = projected_group_positions(fixtures, ratings)
+    used_thirds = set()
+    winners = {}
+    rows = []
+
+    def add_match(round_name, match_number, team_a, team_b, source_a, source_b):
+        winner, winner_probability, score = predicted_knockout_winner(team_a, team_b, ratings)
+        winners[match_number] = winner
+        rows.append(
+            {
+                "Fase": round_name,
+                "Jogo": f"Jogo {match_number}",
+                "Seleção A": team_label(team_a) if team_a != "A definir" else team_a,
+                "Origem A": source_a,
+                "Seleção B": team_label(team_b) if team_b != "A definir" else team_b,
+                "Origem B": source_b,
+                "Placar provável": score,
+                "Classificado projetado": team_label(winner) if winner != "A definir" else winner,
+                "Prob. de classificação": pct(winner_probability).replace(".", ",") if not pd.isna(winner_probability) else "-",
+            }
+        )
+
+    for match_number, slot_a, slot_b in ROUND_OF_32_TEMPLATE:
+        team_a, source_a = knockout_slot_team(slot_a, positions, qualified_thirds, used_thirds)
+        team_b, source_b = knockout_slot_team(slot_b, positions, qualified_thirds, used_thirds)
+        add_match("Fase de 32", match_number, team_a, team_b, source_a, source_b)
+
+    for round_name, match_number, source_match_a, source_match_b in KNOCKOUT_FLOW:
+        add_match(
+            round_name,
+            match_number,
+            winners.get(source_match_a, "A definir"),
+            winners.get(source_match_b, "A definir"),
+            f"Vencedor jogo {source_match_a}",
+            f"Vencedor jogo {source_match_b}",
+        )
+
+    return rankings, qualified_thirds, pd.DataFrame(rows)
+
+
 def result_from_goals(home_goals, away_goals, home_team, away_team):
     if pd.isna(home_goals) or pd.isna(away_goals):
         return None
@@ -730,6 +894,72 @@ def render_recent_results_page(matches, fixtures):
         metric_card("Empates", str(draws))
         st.subheader("Histórico de jogos entre as seleções")
         st.dataframe(direct, use_container_width=True, hide_index=True)
+
+
+def render_knockout_page(fixtures, ratings):
+    st.title("Mata-mata projetado")
+    st.write(
+        "A chave abaixo usa a projeção estatística da fase de grupos para preencher a Fase de 32, oitavas, quartas, semifinais e final."
+    )
+
+    rankings, qualified_thirds, bracket = build_knockout_projection(fixtures, ratings)
+    champion = bracket.loc[bracket["Fase"] == "Final", "Classificado projetado"].iloc[0]
+    final_score = bracket.loc[bracket["Fase"] == "Final", "Placar provável"].iloc[0]
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        metric_card("Campeão projetado", champion)
+    with c2:
+        metric_card("Placar provável da final", final_score)
+    with c3:
+        metric_card("Seleções no mata-mata", "32")
+    with c4:
+        metric_card("Terceiros classificados", "8 de 12")
+
+    st.subheader("Classificação projetada da fase de grupos")
+    group_summary = rankings.copy()
+    group_summary["Seleção"] = group_summary["team"].map(team_label)
+    group_summary["Status"] = np.where(
+        group_summary["Posição"] <= 2,
+        "Classificado",
+        np.where(
+            group_summary["team"].isin(qualified_thirds["team"]),
+            "Classificado entre os melhores terceiros",
+            "Eliminado",
+        ),
+    )
+    st.dataframe(
+        group_summary[["Grupo", "Posição", "Seleção", "Pts. esp.", "SG esp.", "GP esp.", "Status"]],
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    st.subheader("Chave projetada")
+    tabs = st.tabs(["Fase de 32", "Oitavas", "Quartas", "Semifinais", "Final"])
+    stages = ["Fase de 32", "Oitavas de final", "Quartas de final", "Semifinal", "Final"]
+    for tab, stage in zip(tabs, stages):
+        with tab:
+            stage_rows = bracket[bracket["Fase"] == stage]
+            st.dataframe(
+                stage_rows[
+                    [
+                        "Jogo",
+                        "Seleção A",
+                        "Origem A",
+                        "Seleção B",
+                        "Origem B",
+                        "Placar provável",
+                        "Classificado projetado",
+                        "Prob. de classificação",
+                    ]
+                ],
+                use_container_width=True,
+                hide_index=True,
+            )
+
+    st.caption(
+        "A alocação dos melhores terceiros é uma projeção operacional: usa os oito melhores terceiros estimados e preenche as vagas compatíveis da Fase de 32."
+    )
 
 
 def accuracy_rate(series):
@@ -1245,7 +1475,7 @@ def main():
     st.sidebar.title("Navegação")
     selected_page = st.sidebar.radio(
         "Página",
-        ["Análise dos jogos", "Confrontos diretos", "Estatísticas de acertos"],
+        ["Análise dos jogos", "Confrontos diretos", "Mata-mata", "Estatísticas de acertos"],
         label_visibility="collapsed",
     )
 
@@ -1261,6 +1491,14 @@ def main():
         render_recent_results_page(matches, fixtures)
         st.caption(
             "Dados históricos baseados em jogos de Copas do Mundo; quando não houver jogo entre as duas seleções, a página sinaliza que elas nunca se enfrentaram na base."
+        )
+        render_author_panel()
+        return
+
+    if selected_page == "Mata-mata":
+        render_knockout_page(fixtures, ratings)
+        st.caption(
+            "A estrutura considera o formato da Copa 2026 com 12 grupos, top 2 de cada grupo e os 8 melhores terceiros avançando ao mata-mata."
         )
         render_author_panel()
         return

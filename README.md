@@ -13,6 +13,7 @@ Aplicação Streamlit para analisar jogos da Copa do Mundo 2026 com base no hist
 - Mostra bandeiras dos países e um card de palpite sugerido para bolão.
 - Projeta a classificação esperada do grupo com pontos, gols pró, gols contra e saldo.
 - Inclui a página `Confrontos diretos`, que mostra quando duas seleções já se enfrentaram em Copas, o placar e quem venceu.
+- Inclui a página `Mata-mata`, que projeta a chave da Fase de 32 até a final a partir da classificação estimada dos grupos.
 - Inclui a página `Estatísticas de acertos`, que compara os palpites estatísticos com os placares reais e calcula taxa de acerto.
 
 ## Como executar
