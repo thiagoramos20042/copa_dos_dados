@@ -1020,17 +1020,15 @@ def render_hero(cover_uri, selected_page):
     page = PAGE_DETAILS[selected_page]
     st.markdown(
         f"""
-        <div class="hero">
-            <img class="hero-img" src="{cover_uri}" alt="Capa com futebol e ciência de dados">
-            <div class="hero-overlay"></div>
-            <div class="hero-content">
-                <div class="hero-meta">{page['meta']}</div>
-                <div class="hero-title">Copa dos Dados 2026</div>
-                <div class="hero-copy">{page['copy']}</div>
+        <div class="report-header">
+            <div>
+                <div class="report-kicker">Copa dos Dados 2026</div>
+                <div class="report-title">{page['title']}</div>
+                <div class="report-copy">{page['copy']}</div>
             </div>
-            <div class="hero-scorecard">
-                <span>Experiência ativa</span>
-                <strong>{page['title']}</strong>
+            <div class="report-status">
+                <span>Página ativa</span>
+                <strong>{page['meta']}</strong>
             </div>
         </div>
         """,
@@ -1182,30 +1180,27 @@ def apply_theme():
         """
         <style>
             :root {
-                --ink: #07111f;
-                --muted: #526070;
-                --line: #c9d6e4;
+                --ink: #252423;
+                --muted: #605e5c;
+                --line: #d2d0ce;
                 --surface: #ffffff;
-                --surface-soft: #f5f8fc;
-                --green: #00a86b;
-                --blue: #0057ff;
-                --gold: #ffb000;
-                --red: #ef3340;
-                --cyan: #00c2ff;
-                --navy: #071827;
+                --surface-soft: #f3f2f1;
+                --green: #107c10;
+                --blue: #0078d4;
+                --gold: #f2c811;
+                --red: #d13438;
+                --cyan: #00b7c3;
+                --navy: #201f1e;
             }
 
             .stApp {
-                background:
-                    linear-gradient(135deg, rgba(0, 87, 255, .08), rgba(0, 194, 255, 0) 34%),
-                    linear-gradient(315deg, rgba(0, 168, 107, .10), rgba(255, 176, 0, .06) 38%, rgba(255, 255, 255, 0) 66%),
-                    #f7fbff;
+                background: #f3f2f1;
             }
 
             .main .block-container {
                 max-width: 1260px;
-                padding-bottom: 3rem;
-                padding-top: 1.15rem;
+                padding-bottom: 2rem;
+                padding-top: 1rem;
             }
 
             h1, h2, h3 {
@@ -1224,37 +1219,98 @@ def apply_theme():
             }
 
             [data-testid="stSidebar"] {
-                background:
-                    linear-gradient(180deg, rgba(0, 87, 255, .08), rgba(0, 168, 107, .07)),
-                    #ffffff;
-                border-right: 1px solid rgba(7, 24, 39, .10);
+                background: #ffffff;
+                border-right: 1px solid var(--line);
             }
 
             div[role="radiogroup"] {
-                background: rgba(255, 255, 255, .78);
-                border: 1px solid rgba(7, 24, 39, .10);
-                border-radius: 8px;
-                box-shadow: 0 16px 42px rgba(7, 24, 39, .08);
+                background: #ffffff;
+                border: 1px solid var(--line);
+                border-radius: 3px;
+                box-shadow: none;
                 display: flex;
-                gap: 8px;
-                padding: 8px;
+                gap: 0;
+                padding: 0;
             }
 
             div[role="radiogroup"] label {
-                border-radius: 8px;
+                border-right: 1px solid var(--line);
+                border-radius: 0;
                 margin: 0;
-                padding: 8px 12px;
+                padding: 8px 14px;
             }
 
             div[role="radiogroup"] label:has(input:checked) {
-                background: linear-gradient(135deg, var(--blue), var(--green));
-                color: #ffffff;
-                box-shadow: 0 10px 24px rgba(0, 87, 255, .22);
+                background: #f2c811;
+                box-shadow: inset 0 -3px 0 #252423;
+                color: var(--ink);
             }
 
             div[role="radiogroup"] label:has(input:checked) p,
             div[role="radiogroup"] label:has(input:checked) span {
-                color: #ffffff !important;
+                color: var(--ink) !important;
+                font-weight: 700;
+            }
+
+            .report-header {
+                align-items: center;
+                background: #ffffff;
+                border: 1px solid var(--line);
+                border-left: 8px solid var(--gold);
+                border-radius: 3px;
+                display: flex;
+                gap: 22px;
+                justify-content: space-between;
+                margin: 12px 0 10px;
+                padding: 18px 20px;
+            }
+
+            .report-kicker {
+                color: var(--muted);
+                font-size: 12px;
+                font-weight: 700;
+                letter-spacing: .06em;
+                margin-bottom: 4px;
+                text-transform: uppercase;
+            }
+
+            .report-title {
+                color: var(--ink);
+                font-size: 28px;
+                font-weight: 800;
+                line-height: 1.1;
+                margin-bottom: 6px;
+            }
+
+            .report-copy {
+                color: var(--muted);
+                font-size: 14px;
+                line-height: 1.35;
+                max-width: 760px;
+            }
+
+            .report-status {
+                background: #201f1e;
+                border-radius: 3px;
+                color: #ffffff;
+                min-width: 220px;
+                padding: 12px 14px;
+            }
+
+            .report-status span {
+                color: rgba(255, 255, 255, .72);
+                display: block;
+                font-size: 11px;
+                font-weight: 700;
+                margin-bottom: 4px;
+                text-transform: uppercase;
+            }
+
+            .report-status strong {
+                color: #ffffff;
+                display: block;
+                font-size: 15px;
+                line-height: 1.2;
             }
 
             .hero {
@@ -1355,18 +1411,18 @@ def apply_theme():
 
             .nav-card-grid {
                 display: grid;
-                gap: 12px;
+                gap: 10px;
                 grid-template-columns: repeat(4, minmax(0, 1fr));
-                margin: 0 0 18px;
+                margin: 0 0 12px;
             }
 
             .nav-card {
-                background: rgba(255, 255, 255, .82);
-                border: 1px solid rgba(7, 24, 39, .10);
-                border-radius: 8px;
-                box-shadow: 0 14px 35px rgba(7, 24, 39, .07);
-                min-height: 86px;
-                padding: 14px 16px;
+                background: #ffffff;
+                border: 1px solid var(--line);
+                border-radius: 3px;
+                box-shadow: none;
+                min-height: 74px;
+                padding: 12px 14px;
             }
 
             .nav-card span {
@@ -1386,8 +1442,8 @@ def apply_theme():
             }
 
             .nav-card.active {
-                background: linear-gradient(135deg, #071827, #0b3b7a 58%, #0057ff);
-                border-color: rgba(255, 255, 255, .28);
+                background: #201f1e;
+                border-color: #201f1e;
             }
 
             .nav-card.active span,
@@ -1400,14 +1456,13 @@ def apply_theme():
                 align-items: center;
                 justify-content: space-between;
                 gap: 16px;
-                border: 1px solid rgba(7, 24, 39, .10);
-                border-radius: 8px;
-                box-shadow: 0 16px 38px rgba(7, 24, 39, .08);
-                padding: 20px 22px;
-                background:
-                    linear-gradient(90deg, rgba(0, 168, 107, .11), rgba(255, 255, 255, .92) 32%, rgba(0, 87, 255, .10)),
-                    var(--surface);
-                margin: 14px 0 18px;
+                border: 1px solid var(--line);
+                border-left: 6px solid var(--blue);
+                border-radius: 3px;
+                box-shadow: none;
+                padding: 16px 18px;
+                background: var(--surface);
+                margin: 12px 0 14px;
             }
 
             .team-name {
@@ -1428,12 +1483,12 @@ def apply_theme():
             }
 
             .versus {
-                background: #071827;
-                border-radius: 8px;
-                color: #ffffff;
+                background: #f2c811;
+                border-radius: 3px;
+                color: var(--ink);
                 font-size: 13px;
                 font-weight: 800;
-                padding: 10px 14px;
+                padding: 9px 12px;
                 text-align: center;
                 text-transform: uppercase;
                 letter-spacing: .08em;
@@ -1447,17 +1502,18 @@ def apply_theme():
             }
 
             .decision-card {
-                border: 1px solid rgba(7, 24, 39, .10);
-                border-radius: 8px;
-                background: rgba(255, 255, 255, .88);
-                box-shadow: 0 16px 34px rgba(7, 24, 39, .07);
-                padding: 16px 18px;
-                min-height: 124px;
+                border: 1px solid var(--line);
+                border-radius: 3px;
+                background: var(--surface);
+                box-shadow: none;
+                padding: 15px 16px;
+                min-height: 118px;
             }
 
             .decision-card.primary {
-                background: linear-gradient(135deg, #003f2f, var(--green));
-                border-color: rgba(0, 168, 107, .55);
+                background: #201f1e;
+                border-bottom: 5px solid var(--gold);
+                border-color: #201f1e;
                 color: #ffffff;
             }
 
@@ -1493,13 +1549,11 @@ def apply_theme():
             }
 
             .pick-card {
-                border: 1px solid rgba(0, 168, 107, .25);
+                border: 1px solid var(--line);
                 border-left: 6px solid var(--green);
-                border-radius: 8px;
-                background:
-                    linear-gradient(135deg, rgba(0, 168, 107, .12), rgba(255, 255, 255, .92)),
-                    var(--surface);
-                box-shadow: 0 16px 34px rgba(7, 24, 39, .08);
+                border-radius: 3px;
+                background: var(--surface);
+                box-shadow: none;
                 padding: 18px 20px;
                 min-height: 154px;
             }
@@ -1536,12 +1590,12 @@ def apply_theme():
             }
 
             div[data-testid="stMetric"] {
-                border: 1px solid rgba(7, 24, 39, .10);
-                background:
-                    linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(245, 248, 252, .92));
-                box-shadow: 0 14px 30px rgba(7, 24, 39, .07);
-                padding: 15px 16px;
-                border-radius: 8px;
+                border: 1px solid var(--line);
+                border-top: 4px solid var(--gold);
+                background: #ffffff;
+                box-shadow: none;
+                padding: 12px 14px;
+                border-radius: 3px;
             }
 
             div[data-testid="stMetricLabel"] {
@@ -1555,9 +1609,9 @@ def apply_theme():
             }
 
             div[data-testid="stDataFrame"] {
-                border: 1px solid rgba(7, 24, 39, .10);
-                border-radius: 8px;
-                box-shadow: 0 14px 30px rgba(7, 24, 39, .06);
+                border: 1px solid var(--line);
+                border-radius: 3px;
+                box-shadow: none;
                 overflow: hidden;
             }
 
@@ -1566,16 +1620,16 @@ def apply_theme():
             }
 
             .stTabs [data-baseweb="tab"] {
-                background: rgba(255, 255, 255, .84);
-                border: 1px solid rgba(7, 24, 39, .10);
-                border-radius: 8px;
+                background: #ffffff;
+                border: 1px solid var(--line);
+                border-radius: 3px;
                 font-weight: 800;
                 padding: 8px 14px;
             }
 
             .stTabs [aria-selected="true"] {
-                background: linear-gradient(135deg, var(--red), var(--gold));
-                color: #071827;
+                background: var(--gold);
+                color: var(--ink);
             }
 
             .author-panel {
