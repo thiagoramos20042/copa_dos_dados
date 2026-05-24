@@ -1041,14 +1041,9 @@ def render_hero(cover_uri, selected_page):
     for page_name, details in PAGE_DETAILS.items():
         active_class = " active" if page_name == selected_page else ""
         cards.append(
-            f"""
-            <div class="nav-card{active_class}">
-                <span>{details['meta']}</span>
-                <strong>{page_name}</strong>
-            </div>
-            """
+            f'<div class="nav-card{active_class}"><span>{details["meta"]}</span><strong>{page_name}</strong></div>'
         )
-    st.markdown(f"<div class='nav-card-grid'>{''.join(cards)}</div>", unsafe_allow_html=True)
+    st.markdown(f'<div class="nav-card-grid">{"".join(cards)}</div>', unsafe_allow_html=True)
 
 
 def render_accuracy_dashboard(fixtures, results, ratings, results_source):
