@@ -5,11 +5,12 @@ Aplicação Streamlit para analisar jogos da Copa do Mundo 2026 com base no hist
 ## O que a app faz
 
 - Lista os 48 participantes e os 72 jogos da fase de grupos de 2026.
-- Calcula um rating por seleção usando desempenho histórico em Copas, gols, vitórias, finais e títulos.
-- Estima probabilidades 1X2 para cada jogo: vitória do time A, empate e vitória do time B.
-- Estima gols esperados para cada seleção e total da partida.
+- Treina uma rede neural MLP com os jogos históricos das Copas, usando apenas informações disponíveis antes de cada partida.
+- Estima os gols de cada seleção com a rede neural.
+- Executa 40 mil simulações de Monte Carlo por confronto para calcular probabilidades 1X2, placares e mercados de gols.
+- Executa 12 mil simulações por grupo para projetar pontos, saldo e probabilidade de classificação.
 - Calcula indicadores de gols: acima de 1,5 gol, acima de 2,5 gols, acima de 3,5 gols e ambos marcam.
-- Mostra os placares mais prováveis por distribuição de Poisson.
+- Mostra os placares mais prováveis observados nas simulações de Monte Carlo.
 - Mostra bandeiras dos países e um card de palpite sugerido para bolão.
 - Projeta a classificação esperada do grupo com pontos, gols pró, gols contra e saldo.
 - Inclui a página `Confrontos diretos`, que mostra quando duas seleções já se enfrentaram em Copas, o placar e quem venceu.
@@ -22,6 +23,16 @@ Aplicação Streamlit para analisar jogos da Copa do Mundo 2026 com base no hist
 pip install -r requirements.txt
 streamlit run main.py
 ```
+
+## Modelo de machine learning
+
+O motor combina:
+
+- atributos históricos de ataque, defesa, pontos por jogo, aproveitamento e forma recente;
+- uma rede neural `MLPRegressor` com duas camadas ocultas;
+- validação temporal, treinando primeiro nos jogos mais antigos e avaliando nos mais recentes;
+- distribuição de Poisson alimentada pelos gols previstos pela rede;
+- simulação de Monte Carlo para resultados, mercados de gols, grupos e mata-mata.
 
 ## Dados
 

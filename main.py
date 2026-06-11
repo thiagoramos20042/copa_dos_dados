@@ -5,10 +5,15 @@ import math
 import os
 import urllib.error
 import urllib.request
+import warnings
+import zlib
 
 import numpy as np
 import pandas as pd
 import streamlit as st
+from sklearn.exceptions import ConvergenceWarning
+from sklearn.neural_network import MLPRegressor
+from sklearn.preprocessing import StandardScaler
 
 
 BASE_DIR = Path(__file__).parent
@@ -20,6 +25,9 @@ DEFAULT_RESULTS_API_URL = (
     "scoreboard?dates=20260611-20260719&limit=200"
 )
 RESULTS_CACHE_TTL_SECONDS = 300
+MATCH_MONTE_CARLO_RUNS = 40000
+GROUP_MONTE_CARLO_RUNS = 12000
+MODEL_RANDOM_STATE = 42
 
 TEAM_ALIASES = {
     "USA": "United States",
@@ -399,161 +407,246 @@ def normalize_team(team):
     return TEAM_ALIASES.get(team, team)
 
 
-def build_team_ratings(matches, champions, teams_2026):
-    matches = matches.copy()
-    matches["TimeDaCasa"] = matches["TimeDaCasa"].map(normalize_team)
-    matches["TimeVisitante"] = matches["TimeVisitante"].map(normalize_team)
-
-    teams = sorted(teams_2026["team"].unique())
-    rows = []
-
-    champion_counts = champions["Vencedor"].map(normalize_team).value_counts()
-    runner_up_counts = champions["Segundo"].map(normalize_team).value_counts()
-
-    for team in teams:
-        home = matches[matches["TimeDaCasa"] == team]
-        away = matches[matches["TimeVisitante"] == team]
-
-        played = len(home) + len(away)
-        wins = int((home["GolsTimeDaCasa"] > home["GolsTimeVisitante"]).sum())
-        wins += int((away["GolsTimeVisitante"] > away["GolsTimeDaCasa"]).sum())
-        draws = int((home["GolsTimeDaCasa"] == home["GolsTimeVisitante"]).sum())
-        draws += int((away["GolsTimeVisitante"] == away["GolsTimeDaCasa"]).sum())
-
-        goals_for = float(home["GolsTimeDaCasa"].sum() + away["GolsTimeVisitante"].sum())
-        goals_against = float(home["GolsTimeVisitante"].sum() + away["GolsTimeDaCasa"].sum())
-        points = wins * 3 + draws
-
-        titles = int(champion_counts.get(team, 0))
-        finals = int(titles + runner_up_counts.get(team, 0))
-        recent = matches[
-            ((matches["TimeDaCasa"] == team) | (matches["TimeVisitante"] == team))
-            & (matches["Ano"] >= 2006)
-        ]
-
-        if played:
-            points_per_match = points / played
-            goal_balance = (goals_for - goals_against) / played
-            attack = goals_for / played
-            defense = goals_against / played
-        else:
-            points_per_match = 0.65
-            goal_balance = -0.25
-            attack = 0.75
-            defense = 1.35
-
-        recency_bonus = min(len(recent), 24) / 24
-        pedigree = np.log1p(titles * 3 + finals)
-        rating = (
-            50
-            + points_per_match * 18
-            + goal_balance * 10
-            + attack * 3
-            - defense * 2
-            + pedigree * 7
-            + recency_bonus * 6
-        )
-
-        rows.append(
-            {
-                "team": team,
-                "played": played,
-                "wins": wins,
-                "draws": draws,
-                "goals_for": goals_for,
-                "goals_against": goals_against,
-                "goals_for_per_match": round(float(attack), 2),
-                "goals_against_per_match": round(float(defense), 2),
-                "titles": titles,
-                "finals": finals,
-                "rating": round(float(rating), 2),
-            }
-        )
-
-    ratings = pd.DataFrame(rows).merge(teams_2026, on="team", how="left")
-    confederation_strength = ratings.groupby("confederation")["rating"].transform("median")
-    ratings["rating"] = ratings["rating"].where(ratings["played"] > 0, confederation_strength - 4)
-    ratings["rating"] = ratings["rating"].round(2)
-    return ratings.sort_values("rating", ascending=False)
+MODEL_FEATURES = [
+    "points_per_game",
+    "goals_for_per_game",
+    "goals_against_per_game",
+    "win_rate",
+    "draw_rate",
+    "recent_points_per_game",
+    "recent_goals_for",
+    "recent_goals_against",
+    "experience",
+]
 
 
-def match_probabilities(team_a, team_b, ratings, neutral_factor=0.08):
-    rating_a = float(ratings.loc[ratings["team"] == team_a, "rating"].iloc[0])
-    rating_b = float(ratings.loc[ratings["team"] == team_b, "rating"].iloc[0])
-    diff = rating_a - rating_b
-
-    draw_base = 0.24 + max(0, 0.08 - abs(diff) / 500)
-    win_a_raw = 1 / (1 + np.exp(-diff / 15))
-    win_a = (1 - draw_base) * win_a_raw
-    win_b = (1 - draw_base) * (1 - win_a_raw)
-
-    win_a = win_a * (1 - neutral_factor) + neutral_factor / 2
-    win_b = win_b * (1 - neutral_factor) + neutral_factor / 2
-    draw = max(0.05, 1 - win_a - win_b)
-
-    total = win_a + draw + win_b
+def empty_team_state():
     return {
-        "home": win_a / total,
-        "draw": draw / total,
-        "away": win_b / total,
+        "games": 0,
+        "wins": 0,
+        "draws": 0,
+        "points": 0,
+        "goals_for": 0.0,
+        "goals_against": 0.0,
+        "recent_points": [],
+        "recent_goals_for": [],
+        "recent_goals_against": [],
     }
 
 
-def poisson_probability(mean, goals):
-    return float(np.exp(-mean) * (mean**goals) / math.factorial(goals))
+def team_state_features(state):
+    games = max(int(state["games"]), 1)
+    recent_games = max(len(state["recent_points"]), 1)
+    return np.array(
+        [
+            state["points"] / games if state["games"] else 1.0,
+            state["goals_for"] / games if state["games"] else 1.25,
+            state["goals_against"] / games if state["games"] else 1.25,
+            state["wins"] / games if state["games"] else 0.30,
+            state["draws"] / games if state["games"] else 0.25,
+            sum(state["recent_points"]) / recent_games if state["recent_points"] else 1.0,
+            sum(state["recent_goals_for"]) / recent_games if state["recent_goals_for"] else 1.25,
+            sum(state["recent_goals_against"]) / recent_games if state["recent_goals_against"] else 1.25,
+            np.log1p(state["games"]),
+        ],
+        dtype=float,
+    )
+
+
+def match_feature_vector(home_features, away_features):
+    difference = home_features - away_features
+    return np.concatenate([home_features, away_features, difference])
+
+
+def update_team_state(state, goals_for, goals_against):
+    state["games"] += 1
+    state["goals_for"] += goals_for
+    state["goals_against"] += goals_against
+    if goals_for > goals_against:
+        points = 3
+        state["wins"] += 1
+    elif goals_for == goals_against:
+        points = 1
+        state["draws"] += 1
+    else:
+        points = 0
+    state["points"] += points
+    state["recent_points"] = (state["recent_points"] + [points])[-5:]
+    state["recent_goals_for"] = (state["recent_goals_for"] + [goals_for])[-5:]
+    state["recent_goals_against"] = (state["recent_goals_against"] + [goals_against])[-5:]
+
+
+def prepare_neural_training_data(matches):
+    ordered = matches.copy()
+    ordered["_order"] = np.arange(len(ordered))
+    ordered = ordered.sort_values(["Ano", "_order"])
+    states = {}
+    features = []
+    targets = []
+
+    for _, match in ordered.iterrows():
+        home = normalize_team(match["TimeDaCasa"])
+        away = normalize_team(match["TimeVisitante"])
+        home_state = states.setdefault(home, empty_team_state())
+        away_state = states.setdefault(away, empty_team_state())
+        features.append(match_feature_vector(team_state_features(home_state), team_state_features(away_state)))
+
+        home_goals = float(match["GolsTimeDaCasa"])
+        away_goals = float(match["GolsTimeVisitante"])
+        targets.append(np.log1p([home_goals, away_goals]))
+        update_team_state(home_state, home_goals, away_goals)
+        update_team_state(away_state, away_goals, home_goals)
+
+    return np.asarray(features), np.asarray(targets), states
+
+
+def fit_neural_goal_model(features, targets):
+    split = max(int(len(features) * 0.85), 1)
+    scaler = StandardScaler().fit(features[:split])
+    train_x = scaler.transform(features[:split])
+    validation_x = scaler.transform(features[split:])
+
+    model_settings = {
+        "hidden_layer_sizes": (32, 16),
+        "activation": "relu",
+        "solver": "adam",
+        "alpha": 0.015,
+        "learning_rate_init": 0.003,
+        "max_iter": 1200,
+        "early_stopping": True,
+        "validation_fraction": 0.15,
+        "n_iter_no_change": 45,
+        "random_state": MODEL_RANDOM_STATE,
+    }
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", ConvergenceWarning)
+        validation_model = MLPRegressor(**model_settings).fit(train_x, targets[:split])
+
+    validation_predictions = np.clip(np.expm1(validation_model.predict(validation_x)), 0, 6)
+    validation_actual = np.expm1(targets[split:])
+    mae = float(np.mean(np.abs(validation_predictions - validation_actual))) if len(validation_actual) else np.nan
+
+    final_scaler = StandardScaler().fit(features)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", ConvergenceWarning)
+        final_model = MLPRegressor(**model_settings).fit(final_scaler.transform(features), targets)
+    return final_model, final_scaler, mae
+
+
+@st.cache_resource
+def build_team_ratings(matches, champions, teams_2026):
+    normalized_matches = matches.copy()
+    normalized_matches["TimeDaCasa"] = normalized_matches["TimeDaCasa"].map(normalize_team)
+    normalized_matches["TimeVisitante"] = normalized_matches["TimeVisitante"].map(normalize_team)
+    features, targets, historical_states = prepare_neural_training_data(normalized_matches)
+    neural_model, feature_scaler, validation_mae = fit_neural_goal_model(features, targets)
+
+    champion_counts = champions["Vencedor"].map(normalize_team).value_counts()
+    runner_up_counts = champions["Segundo"].map(normalize_team).value_counts()
+    rows = []
+    for team in sorted(teams_2026["team"].unique()):
+        state = historical_states.get(team, empty_team_state())
+        values = team_state_features(state)
+        titles = int(champion_counts.get(team, 0))
+        finals = int(titles + runner_up_counts.get(team, 0))
+        rating = 50 + values[0] * 16 + (values[1] - values[2]) * 9 + values[5] * 5 + np.log1p(titles * 3 + finals) * 6
+        row = {
+            "team": team,
+            "played": int(state["games"]),
+            "wins": int(state["wins"]),
+            "draws": int(state["draws"]),
+            "goals_for": float(state["goals_for"]),
+            "goals_against": float(state["goals_against"]),
+            "goals_for_per_match": round(float(values[1]), 2),
+            "goals_against_per_match": round(float(values[2]), 2),
+            "titles": titles,
+            "finals": finals,
+            "rating": round(float(rating), 2),
+        }
+        row.update(dict(zip(MODEL_FEATURES, values)))
+        rows.append(row)
+
+    ratings = pd.DataFrame(rows).merge(teams_2026, on="team", how="left")
+    numeric_features = MODEL_FEATURES + [
+        "goals_for_per_match",
+        "goals_against_per_match",
+        "rating",
+    ]
+    for column in numeric_features:
+        confederation_median = ratings.groupby("confederation")[column].transform("median")
+        global_median = ratings[column].replace(0, np.nan).median()
+        ratings[column] = ratings[column].where(ratings["played"] > 0, confederation_median)
+        ratings[column] = ratings[column].fillna(global_median)
+
+    ratings.attrs["neural_model"] = neural_model
+    ratings.attrs["feature_scaler"] = feature_scaler
+    ratings.attrs["validation_mae"] = validation_mae
+    ratings.attrs["model_name"] = "Rede neural MLP + Monte Carlo"
+    ratings.attrs["simulation_cache"] = {}
+    return ratings.sort_values("rating", ascending=False)
+
+
+def model_team_features(team, ratings):
+    row = ratings.loc[ratings["team"] == team]
+    if row.empty:
+        return np.array([1.0, 1.25, 1.25, 0.30, 0.25, 1.0, 1.25, 1.25, 0.0])
+    return row.iloc[0][MODEL_FEATURES].astype(float).to_numpy()
 
 
 def estimate_goals(team_a, team_b, ratings):
-    team_a_row = ratings.loc[ratings["team"] == team_a].iloc[0]
-    team_b_row = ratings.loc[ratings["team"] == team_b].iloc[0]
-    tournament_goal_avg = 2.65
+    cache = ratings.attrs.setdefault("simulation_cache", {})
+    cache_key = ("goals", team_a, team_b)
+    if cache_key in cache:
+        return cache[cache_key]
 
-    attack_a = float(team_a_row["goals_for_per_match"]) or tournament_goal_avg / 2
-    attack_b = float(team_b_row["goals_for_per_match"]) or tournament_goal_avg / 2
-    defense_a = float(team_a_row["goals_against_per_match"]) or tournament_goal_avg / 2
-    defense_b = float(team_b_row["goals_against_per_match"]) or tournament_goal_avg / 2
+    feature_vector = match_feature_vector(
+        model_team_features(team_a, ratings),
+        model_team_features(team_b, ratings),
+    ).reshape(1, -1)
+    model = ratings.attrs["neural_model"]
+    scaler = ratings.attrs["feature_scaler"]
+    prediction = np.expm1(model.predict(scaler.transform(feature_vector))[0])
+    expected_home = float(np.clip(prediction[0], 0.15, 4.2))
+    expected_away = float(np.clip(prediction[1], 0.15, 4.2))
+    cache[cache_key] = (expected_home, expected_away)
+    return expected_home, expected_away
 
-    rating_a = float(team_a_row["rating"])
-    rating_b = float(team_b_row["rating"])
-    strength_adjustment_a = np.clip(1 + (rating_a - rating_b) / 180, 0.72, 1.35)
-    strength_adjustment_b = np.clip(1 + (rating_b - rating_a) / 180, 0.72, 1.35)
 
-    expected_a = ((attack_a + defense_b) / 2) * strength_adjustment_a
-    expected_b = ((attack_b + defense_a) / 2) * strength_adjustment_b
+def monte_carlo_scores(expected_home, expected_away, simulations=MATCH_MONTE_CARLO_RUNS):
+    seed_text = f"{expected_home:.6f}|{expected_away:.6f}|{simulations}"
+    rng = np.random.default_rng(zlib.crc32(seed_text.encode("utf-8")))
+    home_goals = rng.poisson(expected_home, simulations)
+    away_goals = rng.poisson(expected_away, simulations)
+    return home_goals, away_goals
 
-    expected_a = float(np.clip(expected_a, 0.25, 3.4))
-    expected_b = float(np.clip(expected_b, 0.25, 3.4))
-    return expected_a, expected_b
+
+def match_probabilities(team_a, team_b, ratings, neutral_factor=0.08):
+    expected_home, expected_away = estimate_goals(team_a, team_b, ratings)
+    home_goals, away_goals = monte_carlo_scores(expected_home, expected_away)
+    return {
+        "home": float(np.mean(home_goals > away_goals)),
+        "draw": float(np.mean(home_goals == away_goals)),
+        "away": float(np.mean(home_goals < away_goals)),
+    }
 
 
 def goal_markets(expected_home, expected_away):
-    max_goals = 8
-    score_rows = []
-    for home_goals in range(max_goals + 1):
-        for away_goals in range(max_goals + 1):
-            probability = poisson_probability(expected_home, home_goals) * poisson_probability(
-                expected_away, away_goals
-            )
-            score_rows.append(
-                {
-                    "home_goals": home_goals,
-                    "away_goals": away_goals,
-                    "total_goals": home_goals + away_goals,
-                    "probability": probability,
-                }
-            )
-
-    scores = pd.DataFrame(score_rows)
+    home_goals, away_goals = monte_carlo_scores(expected_home, expected_away)
+    total_goals = home_goals + away_goals
+    score_counts = (
+        pd.DataFrame({"home_goals": home_goals, "away_goals": away_goals})
+        .value_counts()
+        .rename("count")
+        .reset_index()
+    )
+    score_counts["probability"] = score_counts["count"] / len(home_goals)
+    score_counts["total_goals"] = score_counts["home_goals"] + score_counts["away_goals"]
     return {
-        "over_1_5": float(scores.loc[scores["total_goals"] > 1.5, "probability"].sum()),
-        "over_2_5": float(scores.loc[scores["total_goals"] > 2.5, "probability"].sum()),
-        "over_3_5": float(scores.loc[scores["total_goals"] > 3.5, "probability"].sum()),
-        "both_score": float(
-            scores.loc[
-                (scores["home_goals"] > 0) & (scores["away_goals"] > 0), "probability"
-            ].sum()
-        ),
-        "scorelines": scores.sort_values("probability", ascending=False).head(6),
+        "over_1_5": float(np.mean(total_goals > 1.5)),
+        "over_2_5": float(np.mean(total_goals > 2.5)),
+        "over_3_5": float(np.mean(total_goals > 3.5)),
+        "both_score": float(np.mean((home_goals > 0) & (away_goals > 0))),
+        "scorelines": score_counts.sort_values("probability", ascending=False).head(6),
     }
 
 
@@ -582,62 +675,77 @@ def pick_for_pool(home, away, probabilities, goals):
     return pick, outcomes[pick], confidence, score
 
 
-def projected_group_table(group, fixtures, ratings):
+def simulate_group_table(group, fixtures, ratings):
     group_fixtures = fixtures[fixtures["group"] == group]
     teams = sorted(set(group_fixtures["home_team"]) | set(group_fixtures["away_team"]))
-    table = {
-        team: {"Seleção": team_label(team), "PJ": 3, "Pts. esp.": 0.0, "GP esp.": 0.0, "GC esp.": 0.0}
-        for team in teams
-    }
+    team_index = {team: index for index, team in enumerate(teams)}
+    points = np.zeros((GROUP_MONTE_CARLO_RUNS, len(teams)), dtype=float)
+    goals_for = np.zeros_like(points)
+    goals_against = np.zeros_like(points)
+    rng = np.random.default_rng(zlib.crc32(f"group-{group}".encode("utf-8")))
 
     for _, match in group_fixtures.iterrows():
         home = match["home_team"]
         away = match["away_team"]
-        probabilities = match_probabilities(home, away, ratings)
         expected_home, expected_away = estimate_goals(home, away, ratings)
+        simulated_home = rng.poisson(expected_home, GROUP_MONTE_CARLO_RUNS)
+        simulated_away = rng.poisson(expected_away, GROUP_MONTE_CARLO_RUNS)
+        home_index = team_index[home]
+        away_index = team_index[away]
 
-        table[home]["Pts. esp."] += probabilities["home"] * 3 + probabilities["draw"]
-        table[away]["Pts. esp."] += probabilities["away"] * 3 + probabilities["draw"]
-        table[home]["GP esp."] += expected_home
-        table[home]["GC esp."] += expected_away
-        table[away]["GP esp."] += expected_away
-        table[away]["GC esp."] += expected_home
+        goals_for[:, home_index] += simulated_home
+        goals_against[:, home_index] += simulated_away
+        goals_for[:, away_index] += simulated_away
+        goals_against[:, away_index] += simulated_home
+        points[:, home_index] += np.where(simulated_home > simulated_away, 3, np.where(simulated_home == simulated_away, 1, 0))
+        points[:, away_index] += np.where(simulated_away > simulated_home, 3, np.where(simulated_home == simulated_away, 1, 0))
 
-    projection = pd.DataFrame(table.values())
-    projection["SG esp."] = projection["GP esp."] - projection["GC esp."]
-    numeric_cols = ["Pts. esp.", "GP esp.", "GC esp.", "SG esp."]
-    projection[numeric_cols] = projection[numeric_cols].round(2)
-    return projection.sort_values(["Pts. esp.", "SG esp.", "GP esp."], ascending=False)
+    position_counts = np.zeros((len(teams), len(teams)), dtype=int)
+    goal_difference = goals_for - goals_against
+    for simulation in range(GROUP_MONTE_CARLO_RUNS):
+        order = np.lexsort(
+            (
+                -goals_for[simulation],
+                -goal_difference[simulation],
+                -points[simulation],
+            )
+        )
+        for position, team_position in enumerate(order):
+            position_counts[team_position, position] += 1
+
+    rows = []
+    for team, index in team_index.items():
+        rows.append(
+            {
+                "Grupo": group,
+                "team": team,
+                "PJ": 3,
+                "Pts. esp.": round(float(points[:, index].mean()), 2),
+                "GP esp.": round(float(goals_for[:, index].mean()), 2),
+                "GC esp.": round(float(goals_against[:, index].mean()), 2),
+                "SG esp.": round(float(goal_difference[:, index].mean()), 2),
+                "Prob. 1º": position_counts[index, 0] / GROUP_MONTE_CARLO_RUNS,
+                "Prob. top 2": position_counts[index, :2].sum() / GROUP_MONTE_CARLO_RUNS,
+            }
+        )
+    projection = pd.DataFrame(rows)
+    projection = projection.sort_values(["Pts. esp.", "SG esp.", "GP esp."], ascending=False).reset_index(drop=True)
+    projection["Posição"] = projection.index + 1
+    return projection
+
+
+def projected_group_table(group, fixtures, ratings):
+    projection = simulate_group_table(group, fixtures, ratings).copy()
+    projection["Seleção"] = projection["team"].map(team_label)
+    projection["Prob. 1º"] = projection["Prob. 1º"].map(pct)
+    projection["Prob. top 2"] = projection["Prob. top 2"].map(pct)
+    return projection[
+        ["Seleção", "PJ", "Pts. esp.", "GP esp.", "GC esp.", "SG esp.", "Prob. 1º", "Prob. top 2"]
+    ]
 
 
 def projected_group_table_raw(group, fixtures, ratings):
-    group_fixtures = fixtures[fixtures["group"] == group]
-    teams = sorted(set(group_fixtures["home_team"]) | set(group_fixtures["away_team"]))
-    table = {
-        team: {"Grupo": group, "team": team, "PJ": 3, "Pts. esp.": 0.0, "GP esp.": 0.0, "GC esp.": 0.0}
-        for team in teams
-    }
-
-    for _, match in group_fixtures.iterrows():
-        home = match["home_team"]
-        away = match["away_team"]
-        probabilities = match_probabilities(home, away, ratings)
-        expected_home, expected_away = estimate_goals(home, away, ratings)
-
-        table[home]["Pts. esp."] += probabilities["home"] * 3 + probabilities["draw"]
-        table[away]["Pts. esp."] += probabilities["away"] * 3 + probabilities["draw"]
-        table[home]["GP esp."] += expected_home
-        table[home]["GC esp."] += expected_away
-        table[away]["GP esp."] += expected_away
-        table[away]["GC esp."] += expected_home
-
-    projection = pd.DataFrame(table.values())
-    projection["SG esp."] = projection["GP esp."] - projection["GC esp."]
-    projection = projection.sort_values(["Pts. esp.", "SG esp.", "GP esp."], ascending=False).reset_index(drop=True)
-    projection["Posição"] = projection.index + 1
-    numeric_cols = ["Pts. esp.", "GP esp.", "GC esp.", "SG esp."]
-    projection[numeric_cols] = projection[numeric_cols].round(2)
-    return projection
+    return simulate_group_table(group, fixtures, ratings)
 
 
 def projected_group_positions(fixtures, ratings):
@@ -964,7 +1072,7 @@ def render_recent_results_page(matches, fixtures):
 def render_knockout_page(fixtures, ratings):
     st.title("Mata-mata projetado")
     st.write(
-        "A chave abaixo usa a projeção estatística da fase de grupos para preencher a Fase de 32, oitavas, quartas, semifinais e final."
+        "A chave usa a rede neural e as simulações de Monte Carlo da fase de grupos para preencher a Fase de 32, oitavas, quartas, semifinais e final."
     )
 
     rankings, qualified_thirds, bracket = build_knockout_projection(fixtures, ratings)
@@ -1059,9 +1167,9 @@ def render_author_panel():
 
 PAGE_DETAILS = {
     "Análise dos jogos": {
-        "meta": "Probabilidades, gols e palpite para bolão",
+        "meta": "Rede neural, Monte Carlo e palpite para bolão",
         "title": "Análise dos jogos",
-        "copy": "Escolha um confronto da fase de grupos e veja o palpite estatístico, gols esperados, placares prováveis e leitura tática para o bolão.",
+        "copy": "Escolha um confronto e veja as projeções produzidas por uma rede neural treinada com o histórico das Copas e milhares de simulações de Monte Carlo.",
     },
     "Confrontos diretos": {
         "meta": "Histórico entre seleções",
@@ -1074,9 +1182,9 @@ PAGE_DETAILS = {
         "copy": "Veja a rota estimada da Fase de 32 até a final, com classificados projetados, placares prováveis e campeão previsto.",
     },
     "Estatísticas de acertos": {
-        "meta": "Auditoria do modelo",
+        "meta": "Auditoria do modelo de machine learning",
         "title": "Estatísticas de acertos",
-        "copy": "Compare as previsões do modelo com os resultados reais vindos da API e acompanhe a taxa de acerto por métrica.",
+        "copy": "Compare as previsões da rede neural e das simulações com os resultados reais vindos da API.",
     },
 }
 
@@ -1112,7 +1220,7 @@ def render_hero(cover_uri, selected_page):
 def render_accuracy_dashboard(fixtures, results, ratings, results_source):
     st.title("Estatísticas de acertos")
     st.write(
-        "Compare o que o modelo estatístico indicou antes dos jogos com o que aconteceu de fato. "
+        "Compare o que a rede neural e as simulações de Monte Carlo indicaram antes dos jogos com o que aconteceu de fato. "
         f"A fonte atual dos resultados é **{results_source}**."
     )
     if st.button("Atualizar resultados agora", type="secondary"):
@@ -1947,7 +2055,7 @@ def main():
         st.markdown(
             f"""
             <div class="pick-card">
-                <div class="pick-label">Recomendação estatística</div>
+                <div class="pick-label">Recomendação do modelo de machine learning</div>
                 <div class="pick-main">{pick_label}</div>
                 <div class="pick-meta">Probabilidade do palpite: <strong>{pct(pick_probability)}</strong></div>
                 <div class="pick-meta">Placar mais provável: <strong>{score}</strong></div>
@@ -1968,10 +2076,10 @@ def main():
             )
         else:
             st.write(
-                f"{team_label(pick)} tem a maior probabilidade projetada, combinando rating histórico, força ofensiva e gols esperados."
+                f"{team_label(pick)} tem a maior probabilidade projetada pela rede neural após {MATCH_MONTE_CARLO_RUNS:,} simulações de Monte Carlo."
             )
         st.write(
-            f"O modelo projeta **{expected_home + expected_away:.2f} gols** na partida, com placar modal **{score}**."
+            f"O modelo de machine learning projeta **{expected_home + expected_away:.2f} gols** na partida, com placar modal **{score}**."
         )
 
     st.divider()
@@ -2022,7 +2130,7 @@ def main():
             [
                 {
                     "Seleção": team_label(home),
-                    "Rating": float(ratings.loc[ratings["team"] == home, "rating"].iloc[0]),
+                    "Índice do modelo": float(ratings.loc[ratings["team"] == home, "rating"].iloc[0]),
                     "Gols pro/jogo": float(
                         ratings.loc[ratings["team"] == home, "goals_for_per_match"].iloc[0]
                     ),
@@ -2032,7 +2140,7 @@ def main():
                 },
                 {
                     "Seleção": team_label(away),
-                    "Rating": float(ratings.loc[ratings["team"] == away, "rating"].iloc[0]),
+                    "Índice do modelo": float(ratings.loc[ratings["team"] == away, "rating"].iloc[0]),
                     "Gols pro/jogo": float(
                         ratings.loc[ratings["team"] == away, "goals_for_per_match"].iloc[0]
                     ),
