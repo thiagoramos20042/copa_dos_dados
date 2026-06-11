@@ -788,6 +788,14 @@ def yes_no(value):
     return "Sim" if value else "Não"
 
 
+def result_from_scoreline(score, home_team, away_team):
+    try:
+        home_goals, away_goals = [int(value.strip()) for value in score.split("x", maxsplit=1)]
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return result_from_goals(home_goals, away_goals, home_team, away_team)
+
+
 def build_tracking_table(fixtures, results, ratings):
     tracking = fixtures.merge(results, on="match_id", how="left")
     tracking["actual_home_goals"] = pd.to_numeric(tracking["actual_home_goals"], errors="coerce")
@@ -807,12 +815,13 @@ def build_tracking_table(fixtures, results, ratings):
         played = not pd.isna(actual_home) and not pd.isna(actual_away)
         actual_result = result_from_goals(actual_home, actual_away, home, away) if played else None
         actual_score = f"{int(actual_home)} x {int(actual_away)}" if played else "Pendente"
+        predicted_result = result_from_scoreline(score, home, away)
 
         predicted_over_2_5 = goals["over_2_5"] >= 0.5
         actual_over_2_5 = (actual_home + actual_away) > 2.5 if played else None
         predicted_both_score = goals["both_score"] >= 0.5
         actual_both_score = (actual_home > 0 and actual_away > 0) if played else None
-        hit_result = pick == actual_result if played else None
+        hit_result = predicted_result == actual_result if played else None
         hit_score = score == actual_score if played else None
         hit_goals = predicted_over_2_5 == actual_over_2_5 if played else None
         hit_both = predicted_both_score == actual_both_score if played else None
@@ -822,7 +831,8 @@ def build_tracking_table(fixtures, results, ratings):
                 "Data": match["date"],
                 "Grupo": match["group"],
                 "Jogo": f"{team_label(home)} x {team_label(away)}",
-                "Palpite estatístico": team_label(pick) if pick != "Empate" else "Empate",
+                "Resultado previsto": team_label(predicted_result) if predicted_result != "Empate" else "Empate",
+                "Palpite para bolão": team_label(pick) if pick != "Empate" else "Empate",
                 "Confiança": confidence,
                 "Prob. do palpite": pct(pick_probability),
                 "Placar previsto": score,
@@ -1215,7 +1225,8 @@ def render_accuracy_dashboard(fixtures, results, ratings, results_source):
                 "Data",
                 "Grupo",
                 "Jogo",
-                "Palpite estatístico",
+                "Resultado previsto",
+                "Palpite para bolão",
                 "Confiança",
                 "Prob. do palpite",
                 "Placar previsto",
