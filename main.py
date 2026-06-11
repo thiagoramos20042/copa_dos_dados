@@ -15,11 +15,21 @@ BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
 ASSETS_DIR = BASE_DIR / "assets"
 RESULTS_COLUMNS = ["match_id", "actual_home_goals", "actual_away_goals", "status", "notes"]
-DEFAULT_RESULTS_API_URL = "https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json"
+DEFAULT_RESULTS_API_URL = (
+    "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/"
+    "scoreboard?dates=20260611-20260719&limit=200"
+)
+RESULTS_CACHE_TTL_SECONDS = 300
 
 TEAM_ALIASES = {
     "USA": "United States",
     "Korea Republic": "South Korea",
+    "Czechia": "Czech Republic",
+    "Türkiye": "Turkey",
+    "Cabo Verde": "Cape Verde",
+    "Congo DR": "DR Congo",
+    "Bosnia-Herzegovina": "Bosnia and Herzegovina",
+    "Curaçao": "Curacao",
     "Germany FR": "Germany",
     "IR Iran": "Iran",
     "rn\">United Arab Emirates": "United Arab Emirates",
@@ -140,7 +150,7 @@ COUNTRY_CODE_BY_TEAM = {
 }
 
 
-@st.cache_data
+@st.cache_data(ttl=RESULTS_CACHE_TTL_SECONDS)
 def load_data():
     matches = pd.read_csv(BASE_DIR / "Jogos Copas do Mundo.csv", encoding="cp1252")
     champions = pd.read_csv(BASE_DIR / "Campeoes.csv")
@@ -214,11 +224,16 @@ def team_match_key(value):
 
 def match_id_from_api_record(record, index, fixtures):
     match_id = first_available(record, ["match_id", "id", "fixture_id", "game_id", "match_number", "num"])
-    if match_id not in [None, ""]:
+    if fixtures is None or fixtures.empty:
         return match_id
 
-    if fixtures is None or fixtures.empty:
-        return None
+    valid_match_ids = set(fixtures["match_id"].astype(int))
+    try:
+        numeric_match_id = int(match_id)
+    except (TypeError, ValueError):
+        numeric_match_id = None
+    if numeric_match_id in valid_match_ids:
+        return numeric_match_id
 
     home_team = api_team_name(first_available(record, ["home_team", "homeTeam", "home", "team1"]))
     away_team = api_team_name(first_available(record, ["away_team", "awayTeam", "away", "team2"]))
@@ -236,10 +251,43 @@ def match_id_from_api_record(record, index, fixtures):
         if not candidates.empty:
             return candidates.iloc[0]["match_id"]
 
-    if index < len(fixtures):
-        return fixtures.iloc[index]["match_id"]
-
     return None
+
+
+def records_from_espn_events(events):
+    records = []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+
+        competitions = event.get("competitions", [])
+        if not competitions or not isinstance(competitions[0], dict):
+            continue
+
+        competitors = competitions[0].get("competitors", [])
+        home = next((team for team in competitors if team.get("homeAway") == "home"), None)
+        away = next((team for team in competitors if team.get("homeAway") == "away"), None)
+        if not home or not away:
+            continue
+
+        status_type = event.get("status", {}).get("type", {})
+        completed = bool(status_type.get("completed"))
+        home_team = home.get("team", {})
+        away_team = away.get("team", {})
+        record = {
+            "external_id": event.get("id"),
+            "date": event.get("date"),
+            "home_team": first_available(home_team, ["displayName", "shortDisplayName", "name"]),
+            "away_team": first_available(away_team, ["displayName", "shortDisplayName", "name"]),
+            "status": "finalizado" if completed else "pendente",
+            "notes": f"ESPN | {status_type.get('description', '')}".strip(" |"),
+        }
+        if completed:
+            record["actual_home_goals"] = home.get("score")
+            record["actual_away_goals"] = away.get("score")
+        records.append(record)
+
+    return records
 
 
 def records_from_payload(payload):
@@ -247,6 +295,10 @@ def records_from_payload(payload):
         return payload
 
     if isinstance(payload, dict):
+        events = payload.get("events")
+        if isinstance(events, list):
+            return records_from_espn_events(events)
+
         rounds = payload.get("rounds")
         if isinstance(rounds, list):
             records = []
@@ -314,7 +366,10 @@ def fetch_results_from_api(fixtures=None):
     api_key = get_config_value("RESULTS_API_KEY")
     auth_header = get_config_value("RESULTS_API_AUTH_HEADER", "Authorization")
     auth_prefix = get_config_value("RESULTS_API_AUTH_PREFIX", "Bearer")
-    headers = {"Accept": "application/json"}
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "CopaDosDados/2026",
+    }
     if api_key:
         headers[auth_header] = f"{auth_prefix} {api_key}".strip()
 
@@ -323,13 +378,13 @@ def fetch_results_from_api(fixtures=None):
         with urllib.request.urlopen(request, timeout=15) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
-        return pd.DataFrame(columns=RESULTS_COLUMNS), "API pública OpenFootball indisponível"
+        return pd.DataFrame(columns=RESULTS_COLUMNS), "API de resultados indisponível"
 
     api_results = normalize_api_records(records_from_payload(payload), fixtures)
     if api_results.empty:
-        return pd.DataFrame(columns=RESULTS_COLUMNS), "API pública OpenFootball"
+        return pd.DataFrame(columns=RESULTS_COLUMNS), "ESPN - Copa do Mundo 2026"
 
-    source = "API pública OpenFootball" if url == DEFAULT_RESULTS_API_URL else "API"
+    source = "ESPN - Copa do Mundo 2026" if url == DEFAULT_RESULTS_API_URL else "API"
     return api_results, source
 
 
@@ -1050,6 +1105,9 @@ def render_accuracy_dashboard(fixtures, results, ratings, results_source):
         "Compare o que o modelo estatístico indicou antes dos jogos com o que aconteceu de fato. "
         f"A fonte atual dos resultados é **{results_source}**."
     )
+    if st.button("Atualizar resultados agora", type="secondary"):
+        st.cache_data.clear()
+        st.rerun()
 
     tracking = build_tracking_table(fixtures, results, ratings)
     finished = tracking[tracking["Status"] == "Finalizado"].copy()

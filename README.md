@@ -32,11 +32,13 @@ streamlit run main.py
 
 ## Resultados via API
 
-A página `Estatísticas de acertos` busca placares reais diretamente da API pública do projeto `openfootball/worldcup.json`, sem necessidade de chave:
+A página `Estatísticas de acertos` busca os placares da Copa 2026 diretamente do placar público da ESPN, sem necessidade de chave:
 
 ```text
-https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json
+https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611-20260719&limit=200
 ```
+
+Somente partidas marcadas como concluídas pela API são tratadas como resultados reais. O cache é renovado a cada cinco minutos e também pode ser atualizado manualmente na aplicação.
 
 Se quiser trocar por uma API privada ou comercial, configure no Streamlit Cloud em **Settings > Secrets**:
 
