@@ -898,10 +898,18 @@ def yes_no(value):
 
 def result_from_scoreline(score, home_team, away_team):
     try:
-        home_goals, away_goals = [int(value.strip()) for value in score.split("x", maxsplit=1)]
+        home_goals, away_goals = scoreline_goals(score)
     except (AttributeError, TypeError, ValueError):
         return None
     return result_from_goals(home_goals, away_goals, home_team, away_team)
+
+
+def scoreline_goals(score):
+    return tuple(int(value.strip()) for value in score.split("x", maxsplit=1))
+
+
+def market_label(value):
+    return "Sim" if value else "Não"
 
 
 def build_tracking_table(fixtures, results, ratings):
@@ -924,15 +932,20 @@ def build_tracking_table(fixtures, results, ratings):
         actual_result = result_from_goals(actual_home, actual_away, home, away) if played else None
         actual_score = f"{int(actual_home)} x {int(actual_away)}" if played else "Pendente"
         predicted_result = result_from_scoreline(score, home, away)
+        predicted_home, predicted_away = scoreline_goals(score)
+        predicted_total_goals = predicted_home + predicted_away
 
-        predicted_over_2_5 = goals["over_2_5"] >= 0.5
-        actual_over_2_5 = (actual_home + actual_away) > 2.5 if played else None
-        predicted_both_score = goals["both_score"] >= 0.5
+        actual_total_goals = int(actual_home + actual_away) if played else None
+        predicted_over_2_5 = predicted_total_goals >= 3
+        actual_over_2_5 = actual_total_goals >= 3 if played else None
+        predicted_both_score = predicted_home > 0 and predicted_away > 0
         actual_both_score = (actual_home > 0 and actual_away > 0) if played else None
         hit_result = predicted_result == actual_result if played else None
         hit_score = score == actual_score if played else None
         hit_goals = predicted_over_2_5 == actual_over_2_5 if played else None
         hit_both = predicted_both_score == actual_both_score if played else None
+        hit_total_goals = predicted_total_goals == actual_total_goals if played else None
+        total_goals_error = abs(predicted_total_goals - actual_total_goals) if played else None
 
         rows.append(
             {
@@ -948,16 +961,20 @@ def build_tracking_table(fixtures, results, ratings):
                 "Placar real": actual_score,
                 "Acertou resultado": yes_no(hit_result) if played else "Pendente",
                 "Acertou placar": yes_no(hit_score) if played else "Pendente",
-                "Prev. acima de 2,5": yes_no(predicted_over_2_5),
-                "Real acima de 2,5": yes_no(actual_over_2_5) if played else "Pendente",
-                "Acertou gols": yes_no(hit_goals) if played else "Pendente",
-                "Prev. ambos marcam": yes_no(predicted_both_score),
-                "Real ambos marcam": yes_no(actual_both_score) if played else "Pendente",
+                "Gols do modelo": predicted_total_goals,
+                "Gols reais": actual_total_goals if played else "Pendente",
+                "Modelo: 3+ gols": market_label(predicted_over_2_5),
+                "Real: 3+ gols": market_label(actual_over_2_5) if played else "Pendente",
+                "Acertou 3+ gols": yes_no(hit_goals) if played else "Pendente",
+                "Modelo: ambos marcam": market_label(predicted_both_score),
+                "Real: ambos marcam": market_label(actual_both_score) if played else "Pendente",
                 "Acertou ambos": yes_no(hit_both) if played else "Pendente",
                 "_hit_result": hit_result,
                 "_hit_score": hit_score,
                 "_hit_goals": hit_goals,
                 "_hit_both": hit_both,
+                "_hit_total_goals": hit_total_goals,
+                "_total_goals_error": total_goals_error,
                 "_confidence": confidence,
                 "_pick_probability": pick_probability,
                 "Status": "Finalizado" if played else "Pendente",
@@ -1161,6 +1178,12 @@ def accuracy_count(series):
     return f"{hits} de {len(series)} jogos"
 
 
+def average_goals_error(finished):
+    if finished.empty:
+        return "—"
+    return f"{finished['_total_goals_error'].mean():.2f}".replace(".", ",")
+
+
 def decimal_number(value, digits=2):
     if pd.isna(value):
         return "-"
@@ -1255,8 +1278,6 @@ def render_accuracy_dashboard(fixtures, results, ratings, results_source):
     pending = tracking[tracking["Status"] == "Pendente"].copy()
     total_games = len(tracking)
     coverage = len(finished) / total_games if total_games else 0
-    avg_confidence = finished["_pick_probability"].mean() if len(finished) else np.nan
-
     st.markdown('<div class="accuracy-section-label">Visão geral</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1, 1.4])
     with c1:
@@ -1309,7 +1330,7 @@ def render_accuracy_dashboard(fixtures, results, ratings, results_source):
         )
     with c6:
         accuracy_card(
-            "Acima de 2,5 gols",
+            "Faixa de gols (3+)",
             accuracy_rate(finished["_hit_goals"]),
             accuracy_count(finished["_hit_goals"]),
         )
@@ -1321,9 +1342,9 @@ def render_accuracy_dashboard(fixtures, results, ratings, results_source):
         )
     with c8:
         accuracy_card(
-            "Confiança média",
-            pct(avg_confidence).replace(".", ",") if len(finished) else "—",
-            "probabilidade dos palpites",
+            "Total de gols exato",
+            accuracy_rate(finished["_hit_total_goals"]),
+            accuracy_count(finished["_hit_total_goals"]),
             "info",
         )
 
@@ -1338,26 +1359,45 @@ def render_accuracy_dashboard(fixtures, results, ratings, results_source):
                 "Percentuais extremos ainda não representam o desempenho geral do modelo."
             )
 
-        hit_rows = finished[finished["_hit_result"] == True]
-        miss_rows = finished[finished["_hit_result"] == False]
         performance_summary = pd.DataFrame(
             [
-                {"Métrica": "Resultado 1X2", "Taxa de acerto": accuracy_rate(finished["_hit_result"])},
-                {"Métrica": "Placar exato", "Taxa de acerto": accuracy_rate(finished["_hit_score"])},
-                {"Métrica": "Acima de 2,5 gols", "Taxa de acerto": accuracy_rate(finished["_hit_goals"])},
-                {"Métrica": "Ambos marcam", "Taxa de acerto": accuracy_rate(finished["_hit_both"])},
                 {
-                    "Métrica": "Confiança média nos acertos",
-                    "Taxa de acerto": pct(hit_rows["_pick_probability"].mean()).replace(".", ",") if len(hit_rows) else "—",
+                    "Comparação": "Resultado 1X2",
+                    "Modelo": "Vencedor ou empate indicado pelo placar previsto",
+                    "Real": "Vencedor ou empate do placar oficial",
+                    "Acerto": accuracy_rate(finished["_hit_result"]),
                 },
                 {
-                    "Métrica": "Confiança média nos erros",
-                    "Taxa de acerto": pct(miss_rows["_pick_probability"].mean()).replace(".", ",") if len(miss_rows) else "—",
+                    "Comparação": "Placar exato",
+                    "Modelo": "Placar modal das simulações",
+                    "Real": "Placar oficial",
+                    "Acerto": accuracy_rate(finished["_hit_score"]),
+                },
+                {
+                    "Comparação": "Faixa de gols (3+)",
+                    "Modelo": "Sim quando o placar previsto soma 3 ou mais gols",
+                    "Real": "Sim quando o placar oficial soma 3 ou mais gols",
+                    "Acerto": accuracy_rate(finished["_hit_goals"]),
+                },
+                {
+                    "Comparação": "Ambos marcam",
+                    "Modelo": "Sim quando os dois times marcam no placar previsto",
+                    "Real": "Sim quando os dois times marcam no placar oficial",
+                    "Acerto": accuracy_rate(finished["_hit_both"]),
+                },
+                {
+                    "Comparação": "Total de gols exato",
+                    "Modelo": "Soma de gols do placar previsto",
+                    "Real": "Soma de gols do placar oficial",
+                    "Acerto": accuracy_rate(finished["_hit_total_goals"]),
                 },
             ]
         )
-        st.subheader("Resumo de desempenho")
+        st.subheader("Como o modelo é comparado ao resultado real")
         st.dataframe(performance_summary, use_container_width=True, hide_index=True)
+        st.caption(
+            f"Erro absoluto médio no total de gols: {average_goals_error(finished)} gol(s) por partida."
+        )
 
         group_performance = (
             finished.groupby("Grupo", as_index=False)
@@ -1367,43 +1407,28 @@ def render_accuracy_dashboard(fixtures, results, ratings, results_source):
                 Acerto_placar=("_hit_score", "mean"),
                 Acerto_gols=("_hit_goals", "mean"),
                 Acerto_ambos=("_hit_both", "mean"),
+                Total_gols_exato=("_hit_total_goals", "mean"),
             )
             .rename(
                 columns={
                     "Acerto_resultado": "Resultado 1X2",
                     "Acerto_placar": "Placar exato",
-                    "Acerto_gols": "Acima de 2,5",
+                    "Acerto_gols": "Faixa 3+ gols",
                     "Acerto_ambos": "Ambos marcam",
+                    "Total_gols_exato": "Total de gols exato",
                 }
             )
         )
-        for column in ["Resultado 1X2", "Placar exato", "Acima de 2,5", "Ambos marcam"]:
+        for column in [
+            "Resultado 1X2",
+            "Placar exato",
+            "Faixa 3+ gols",
+            "Ambos marcam",
+            "Total de gols exato",
+        ]:
             group_performance[column] = group_performance[column].map(lambda value: pct(value).replace(".", ","))
         st.subheader("Desempenho por grupo")
         st.dataframe(group_performance, use_container_width=True, hide_index=True)
-
-        confidence_performance = (
-            finished.groupby("Confiança", as_index=False)
-            .agg(
-                Jogos=("Confiança", "size"),
-                Acerto_resultado=("_hit_result", "mean"),
-                Probabilidade_media=("_pick_probability", "mean"),
-            )
-            .rename(
-                columns={
-                    "Acerto_resultado": "Acerto do resultado",
-                    "Probabilidade_media": "Probabilidade média do palpite",
-                }
-            )
-        )
-        confidence_performance["Acerto do resultado"] = confidence_performance["Acerto do resultado"].map(
-            lambda value: pct(value).replace(".", ",")
-        )
-        confidence_performance["Probabilidade média do palpite"] = confidence_performance[
-            "Probabilidade média do palpite"
-        ].map(lambda value: pct(value).replace(".", ","))
-        st.subheader("Desempenho por nível de confiança")
-        st.dataframe(confidence_performance, use_container_width=True, hide_index=True)
 
     st.subheader("Auditoria jogo a jogo")
     finished_tab, pending_tab = st.tabs(
@@ -1425,7 +1450,13 @@ def render_accuracy_dashboard(fixtures, results, ratings, results_source):
                         "Placar real",
                         "Acertou resultado",
                         "Acertou placar",
-                        "Acertou gols",
+                        "Gols do modelo",
+                        "Gols reais",
+                        "Modelo: 3+ gols",
+                        "Real: 3+ gols",
+                        "Acertou 3+ gols",
+                        "Modelo: ambos marcam",
+                        "Real: ambos marcam",
                         "Acertou ambos",
                     ]
                 ],
