@@ -1137,8 +1137,28 @@ def render_knockout_page(fixtures, ratings):
 
 def accuracy_rate(series):
     if series.empty:
-        return "0,0%"
+        return "—"
     return f"{series.mean():.1%}".replace(".", ",")
+
+
+def accuracy_card(label, value, detail, tone="neutral"):
+    st.markdown(
+        f"""
+        <div class="accuracy-card accuracy-card--{tone}">
+            <div class="accuracy-card__label">{label}</div>
+            <div class="accuracy-card__value">{value}</div>
+            <div class="accuracy-card__detail">{detail}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def accuracy_count(series):
+    if series.empty:
+        return "Sem jogos avaliados"
+    hits = int(series.fillna(False).sum())
+    return f"{hits} de {len(series)} jogos"
 
 
 def decimal_number(value, digits=2):
@@ -1218,62 +1238,121 @@ def render_hero(cover_uri, selected_page):
 
 
 def render_accuracy_dashboard(fixtures, results, ratings, results_source):
-    st.title("Estatísticas de acertos")
-    st.write(
-        "Compare o que a rede neural e as simulações de Monte Carlo indicaram antes dos jogos com o que aconteceu de fato. "
-        f"A fonte atual dos resultados é **{results_source}**."
-    )
-    if st.button("Atualizar resultados agora", type="secondary"):
-        st.cache_data.clear()
-        st.rerun()
+    heading_col, action_col = st.columns([5, 1.35], vertical_alignment="bottom")
+    with heading_col:
+        st.title("Estatísticas de acertos")
+        st.write(
+            "Acompanhe como os palpites gerados antes de cada partida se comparam aos resultados oficiais."
+        )
+        st.caption(f"Fonte dos resultados: {results_source} · atualização automática a cada 5 minutos")
+    with action_col:
+        if st.button("Atualizar resultados", type="secondary", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
 
     tracking = build_tracking_table(fixtures, results, ratings)
     finished = tracking[tracking["Status"] == "Finalizado"].copy()
     pending = tracking[tracking["Status"] == "Pendente"].copy()
     total_games = len(tracking)
     coverage = len(finished) / total_games if total_games else 0
+    avg_confidence = finished["_pick_probability"].mean() if len(finished) else np.nan
 
-    c1, c2, c3, c4 = st.columns(4)
+    st.markdown('<div class="accuracy-section-label">Visão geral</div>', unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([1, 1, 1.4])
     with c1:
-        metric_card("Jogos avaliados", str(len(finished)))
+        accuracy_card(
+            "Jogos avaliados",
+            str(len(finished)),
+            f"de {total_games} partidas da fase de grupos",
+            "primary",
+        )
     with c2:
-        metric_card("Cobertura da base", pct(coverage).replace(".", ","))
+        accuracy_card(
+            "Jogos pendentes",
+            str(len(pending)),
+            "aguardando resultado oficial",
+            "muted",
+        )
     with c3:
-        metric_card("Acerto do resultado", accuracy_rate(finished["_hit_result"]) if len(finished) else "0,0%")
-    with c4:
-        metric_card("Jogos pendentes", str(len(pending)))
+        st.markdown(
+            f"""
+            <div class="coverage-card">
+                <div class="coverage-card__top">
+                    <span>Cobertura da competição</span>
+                    <strong>{pct(coverage).replace(".", ",")}</strong>
+                </div>
+                <div class="coverage-card__track">
+                    <span style="width:{coverage:.2%}"></span>
+                </div>
+                <div class="coverage-card__detail">
+                    A leitura fica mais representativa conforme novos jogos são concluídos.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    c5, c6, c7, c8 = st.columns(4)
+    st.markdown('<div class="accuracy-section-label">Desempenho do modelo</div>', unsafe_allow_html=True)
+    c4, c5, c6, c7, c8 = st.columns(5)
+    with c4:
+        accuracy_card(
+            "Resultado 1X2",
+            accuracy_rate(finished["_hit_result"]),
+            accuracy_count(finished["_hit_result"]),
+            "success",
+        )
     with c5:
-        metric_card("Placar exato", accuracy_rate(finished["_hit_score"]) if len(finished) else "0,0%")
+        accuracy_card(
+            "Placar exato",
+            accuracy_rate(finished["_hit_score"]),
+            accuracy_count(finished["_hit_score"]),
+        )
     with c6:
-        metric_card("Acima de 2,5 gols", accuracy_rate(finished["_hit_goals"]) if len(finished) else "0,0%")
+        accuracy_card(
+            "Acima de 2,5 gols",
+            accuracy_rate(finished["_hit_goals"]),
+            accuracy_count(finished["_hit_goals"]),
+        )
     with c7:
-        metric_card("Ambos marcam", accuracy_rate(finished["_hit_both"]) if len(finished) else "0,0%")
+        accuracy_card(
+            "Ambos marcam",
+            accuracy_rate(finished["_hit_both"]),
+            accuracy_count(finished["_hit_both"]),
+        )
     with c8:
-        avg_confidence = finished["_pick_probability"].mean() if len(finished) else np.nan
-        metric_card("Confiança média", pct(avg_confidence).replace(".", ",") if len(finished) else "0,0%")
+        accuracy_card(
+            "Confiança média",
+            pct(avg_confidence).replace(".", ",") if len(finished) else "—",
+            "probabilidade dos palpites",
+            "info",
+        )
 
     if finished.empty:
         st.info(
-            "Nenhum jogo finalizado foi encontrado na API até agora."
+            "Ainda não há jogos finalizados para avaliar. As taxas aparecerão quando a fonte oficial publicar os primeiros resultados."
         )
     else:
+        if len(finished) < 10:
+            st.warning(
+                f"Amostra inicial: somente {len(finished)} jogo(s) avaliado(s). "
+                "Percentuais extremos ainda não representam o desempenho geral do modelo."
+            )
+
         hit_rows = finished[finished["_hit_result"] == True]
         miss_rows = finished[finished["_hit_result"] == False]
         performance_summary = pd.DataFrame(
             [
-                    {"Métrica": "Resultado 1X2", "Taxa de acerto": accuracy_rate(finished["_hit_result"])},
-                    {"Métrica": "Placar exato", "Taxa de acerto": accuracy_rate(finished["_hit_score"])},
-                    {"Métrica": "Acima de 2,5 gols", "Taxa de acerto": accuracy_rate(finished["_hit_goals"])},
-                    {"Métrica": "Ambos marcam", "Taxa de acerto": accuracy_rate(finished["_hit_both"])},
+                {"Métrica": "Resultado 1X2", "Taxa de acerto": accuracy_rate(finished["_hit_result"])},
+                {"Métrica": "Placar exato", "Taxa de acerto": accuracy_rate(finished["_hit_score"])},
+                {"Métrica": "Acima de 2,5 gols", "Taxa de acerto": accuracy_rate(finished["_hit_goals"])},
+                {"Métrica": "Ambos marcam", "Taxa de acerto": accuracy_rate(finished["_hit_both"])},
                 {
                     "Métrica": "Confiança média nos acertos",
-                    "Taxa de acerto": pct(hit_rows["_pick_probability"].mean()).replace(".", ",") if len(hit_rows) else "0,0%",
+                    "Taxa de acerto": pct(hit_rows["_pick_probability"].mean()).replace(".", ",") if len(hit_rows) else "—",
                 },
                 {
                     "Métrica": "Confiança média nos erros",
-                    "Taxa de acerto": pct(miss_rows["_pick_probability"].mean()).replace(".", ",") if len(miss_rows) else "0,0%",
+                    "Taxa de acerto": pct(miss_rows["_pick_probability"].mean()).replace(".", ",") if len(miss_rows) else "—",
                 },
             ]
         )
@@ -1327,29 +1406,48 @@ def render_accuracy_dashboard(fixtures, results, ratings, results_source):
         st.dataframe(confidence_performance, use_container_width=True, hide_index=True)
 
     st.subheader("Auditoria jogo a jogo")
-    st.dataframe(
-        tracking[
-            [
-                "Data",
-                "Grupo",
-                "Jogo",
-                "Resultado previsto",
-                "Palpite para bolão",
-                "Confiança",
-                "Prob. do palpite",
-                "Placar previsto",
-                "Resultado real",
-                "Placar real",
-                "Acertou resultado",
-                "Acertou placar",
-                "Acertou gols",
-                "Acertou ambos",
-                "Status",
-            ]
-        ],
-        use_container_width=True,
-        hide_index=True,
+    finished_tab, pending_tab = st.tabs(
+        [f"Finalizados ({len(finished)})", f"Pendentes ({len(pending)})"]
     )
+    with finished_tab:
+        if finished.empty:
+            st.caption("Nenhum resultado disponível para auditoria.")
+        else:
+            st.dataframe(
+                finished[
+                    [
+                        "Data",
+                        "Grupo",
+                        "Jogo",
+                        "Resultado previsto",
+                        "Placar previsto",
+                        "Resultado real",
+                        "Placar real",
+                        "Acertou resultado",
+                        "Acertou placar",
+                        "Acertou gols",
+                        "Acertou ambos",
+                    ]
+                ],
+                use_container_width=True,
+                hide_index=True,
+            )
+    with pending_tab:
+        st.dataframe(
+            pending[
+                [
+                    "Data",
+                    "Grupo",
+                    "Jogo",
+                    "Palpite para bolão",
+                    "Confiança",
+                    "Prob. do palpite",
+                    "Placar previsto",
+                ]
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
 
 
 def apply_theme():
@@ -1766,6 +1864,100 @@ def apply_theme():
                 font-weight: 700;
             }
 
+            .accuracy-section-label {
+                color: var(--muted);
+                font-size: 12px;
+                font-weight: 800;
+                letter-spacing: .09em;
+                margin: 22px 0 8px;
+                text-transform: uppercase;
+            }
+
+            .accuracy-card,
+            .coverage-card {
+                background: #ffffff;
+                border: 1px solid var(--line);
+                border-radius: 8px;
+                min-height: 128px;
+                padding: 17px 18px;
+            }
+
+            .accuracy-card {
+                border-top: 4px solid #8a8886;
+            }
+
+            .accuracy-card--primary {
+                border-top-color: var(--gold);
+            }
+
+            .accuracy-card--muted {
+                background: #faf9f8;
+                border-top-color: #a19f9d;
+            }
+
+            .accuracy-card--success {
+                border-top-color: var(--green);
+            }
+
+            .accuracy-card--info {
+                border-top-color: var(--blue);
+            }
+
+            .accuracy-card__label {
+                color: var(--muted);
+                font-size: 13px;
+                font-weight: 750;
+                line-height: 1.25;
+                margin-bottom: 10px;
+            }
+
+            .accuracy-card__value {
+                color: var(--ink);
+                font-size: 34px;
+                font-weight: 850;
+                letter-spacing: -.03em;
+                line-height: 1;
+                margin-bottom: 9px;
+            }
+
+            .accuracy-card__detail,
+            .coverage-card__detail {
+                color: var(--muted);
+                font-size: 12px;
+                line-height: 1.4;
+            }
+
+            .coverage-card__top {
+                align-items: center;
+                color: var(--muted);
+                display: flex;
+                font-size: 13px;
+                font-weight: 750;
+                justify-content: space-between;
+                margin-bottom: 18px;
+            }
+
+            .coverage-card__top strong {
+                color: var(--ink);
+                font-size: 24px;
+            }
+
+            .coverage-card__track {
+                background: #edebe9;
+                border-radius: 999px;
+                height: 9px;
+                margin-bottom: 13px;
+                overflow: hidden;
+            }
+
+            .coverage-card__track span {
+                background: linear-gradient(90deg, var(--gold), #d9a900);
+                border-radius: inherit;
+                display: block;
+                height: 100%;
+                min-width: 3px;
+            }
+
             div[data-testid="stMetric"] {
                 border: 1px solid var(--line);
                 border-top: 4px solid var(--gold);
@@ -1860,6 +2052,10 @@ def apply_theme():
             }
 
             @media (max-width: 900px) {
+                .accuracy-card,
+                .coverage-card {
+                    min-height: auto;
+                }
                 .decision-grid {
                     grid-template-columns: repeat(2, minmax(0, 1fr));
                 }
