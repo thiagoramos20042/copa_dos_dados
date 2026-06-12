@@ -1178,6 +1178,25 @@ def accuracy_count(series):
     return f"{hits} de {len(series)} jogos"
 
 
+def comparison_card_data(finished, hit_column, model_column, real_column):
+    if finished.empty:
+        return "—", "Aguardando resultados oficiais"
+
+    if len(finished) == 1:
+        game = finished.iloc[0]
+        status = "Acertou" if bool(game[hit_column]) else "Errou"
+        return f"Real: {game[real_column]}", f"Modelo: {game[model_column]} · {status}"
+
+    return accuracy_rate(finished[hit_column]), accuracy_count(finished[hit_column])
+
+
+def occurrence_summary(finished, column):
+    if finished.empty:
+        return "—"
+    occurrences = int((finished[column] == "Sim").sum())
+    return f"Sim em {occurrences} de {len(finished)}"
+
+
 def average_goals_error(finished):
     if finished.empty:
         return "—"
@@ -1314,37 +1333,68 @@ def render_accuracy_dashboard(fixtures, results, ratings, results_source):
         )
 
     st.markdown('<div class="accuracy-section-label">Desempenho do modelo</div>', unsafe_allow_html=True)
+    result_value, result_detail = comparison_card_data(
+        finished,
+        "_hit_result",
+        "Resultado previsto",
+        "Resultado real",
+    )
+    score_value, score_detail = comparison_card_data(
+        finished,
+        "_hit_score",
+        "Placar previsto",
+        "Placar real",
+    )
+    goals_value, goals_detail = comparison_card_data(
+        finished,
+        "_hit_goals",
+        "Modelo: 3+ gols",
+        "Real: 3+ gols",
+    )
+    both_value, both_detail = comparison_card_data(
+        finished,
+        "_hit_both",
+        "Modelo: ambos marcam",
+        "Real: ambos marcam",
+    )
+    total_value, total_detail = comparison_card_data(
+        finished,
+        "_hit_total_goals",
+        "Gols do modelo",
+        "Gols reais",
+    )
+
     c4, c5, c6, c7, c8 = st.columns(5)
     with c4:
         accuracy_card(
             "Resultado 1X2",
-            accuracy_rate(finished["_hit_result"]),
-            accuracy_count(finished["_hit_result"]),
+            result_value,
+            result_detail,
             "success",
         )
     with c5:
         accuracy_card(
             "Placar exato",
-            accuracy_rate(finished["_hit_score"]),
-            accuracy_count(finished["_hit_score"]),
+            score_value,
+            score_detail,
         )
     with c6:
         accuracy_card(
             "Faixa de gols (3+)",
-            accuracy_rate(finished["_hit_goals"]),
-            accuracy_count(finished["_hit_goals"]),
+            goals_value,
+            goals_detail,
         )
     with c7:
         accuracy_card(
             "Ambos marcam",
-            accuracy_rate(finished["_hit_both"]),
-            accuracy_count(finished["_hit_both"]),
+            both_value,
+            both_detail,
         )
     with c8:
         accuracy_card(
             "Total de gols exato",
-            accuracy_rate(finished["_hit_total_goals"]),
-            accuracy_count(finished["_hit_total_goals"]),
+            total_value,
+            total_detail,
             "info",
         )
 
@@ -1365,31 +1415,31 @@ def render_accuracy_dashboard(fixtures, results, ratings, results_source):
                     "Comparação": "Resultado 1X2",
                     "Modelo": "Vencedor ou empate indicado pelo placar previsto",
                     "Real": "Vencedor ou empate do placar oficial",
-                    "Acerto": accuracy_rate(finished["_hit_result"]),
+                    "Concordância": accuracy_rate(finished["_hit_result"]),
                 },
                 {
                     "Comparação": "Placar exato",
                     "Modelo": "Placar modal das simulações",
                     "Real": "Placar oficial",
-                    "Acerto": accuracy_rate(finished["_hit_score"]),
+                    "Concordância": accuracy_rate(finished["_hit_score"]),
                 },
                 {
                     "Comparação": "Faixa de gols (3+)",
-                    "Modelo": "Sim quando o placar previsto soma 3 ou mais gols",
-                    "Real": "Sim quando o placar oficial soma 3 ou mais gols",
-                    "Acerto": accuracy_rate(finished["_hit_goals"]),
+                    "Modelo": occurrence_summary(finished, "Modelo: 3+ gols"),
+                    "Real": occurrence_summary(finished, "Real: 3+ gols"),
+                    "Concordância": accuracy_rate(finished["_hit_goals"]),
                 },
                 {
                     "Comparação": "Ambos marcam",
-                    "Modelo": "Sim quando os dois times marcam no placar previsto",
-                    "Real": "Sim quando os dois times marcam no placar oficial",
-                    "Acerto": accuracy_rate(finished["_hit_both"]),
+                    "Modelo": occurrence_summary(finished, "Modelo: ambos marcam"),
+                    "Real": occurrence_summary(finished, "Real: ambos marcam"),
+                    "Concordância": accuracy_rate(finished["_hit_both"]),
                 },
                 {
                     "Comparação": "Total de gols exato",
                     "Modelo": "Soma de gols do placar previsto",
                     "Real": "Soma de gols do placar oficial",
-                    "Acerto": accuracy_rate(finished["_hit_total_goals"]),
+                    "Concordância": accuracy_rate(finished["_hit_total_goals"]),
                 },
             ]
         )
