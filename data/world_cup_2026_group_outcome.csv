@@ -1,0 +1,49 @@
+group,position,team,status
+A,1,Mexico,Classificado
+A,2,South Africa,Classificado
+A,3,South Korea,Eliminado
+A,4,Czech Republic,Eliminado
+B,1,Switzerland,Classificado
+B,2,Canada,Classificado
+B,3,Bosnia and Herzegovina,Classificado entre os melhores terceiros
+B,4,Qatar,Eliminado
+C,1,Brazil,Classificado
+C,2,Morocco,Classificado
+C,3,Scotland,Eliminado
+C,4,Haiti,Eliminado
+D,1,United States,Classificado
+D,2,Australia,Classificado
+D,3,Paraguay,Classificado entre os melhores terceiros
+D,4,Turkey,Eliminado
+E,1,Germany,Classificado
+E,2,Ivory Coast,Classificado
+E,3,Ecuador,Classificado entre os melhores terceiros
+E,4,Curacao,Eliminado
+F,1,Netherlands,Classificado
+F,2,Japan,Classificado
+F,3,Sweden,Classificado entre os melhores terceiros
+F,4,Tunisia,Eliminado
+G,1,Belgium,Classificado
+G,2,Egypt,Classificado
+G,3,Iran,Eliminado
+G,4,New Zealand,Eliminado
+H,1,Spain,Classificado
+H,2,Cape Verde,Classificado
+H,3,Uruguay,Eliminado
+H,4,Saudi Arabia,Eliminado
+I,1,France,Classificado
+I,2,Norway,Classificado
+I,3,Senegal,Classificado entre os melhores terceiros
+I,4,Iraq,Eliminado
+J,1,Argentina,Classificado
+J,2,Austria,Classificado
+J,3,Algeria,Classificado entre os melhores terceiros
+J,4,Jordan,Eliminado
+K,1,Colombia,Classificado
+K,2,Portugal,Classificado
+K,3,DR Congo,Classificado entre os melhores terceiros
+K,4,Uzbekistan,Eliminado
+L,1,England,Classificado
+L,2,Croatia,Classificado
+L,3,Ghana,Classificado entre os melhores terceiros
+L,4,Panama,Eliminado
