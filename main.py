@@ -21,6 +21,14 @@ ASSETS_DIR = BASE_DIR / "assets"
 RESULTS_COLUMNS = ["match_id", "actual_home_goals", "actual_away_goals", "status", "notes"]
 GROUP_OUTCOME_COLUMNS = ["group", "position", "team", "status"]
 ROUND_OF_32_COLUMNS = ["match_id", "team_a", "team_b", "source_a", "source_b"]
+KNOCKOUT_RESULTS_COLUMNS = [
+    "match_id",
+    "actual_team_a_goals",
+    "actual_team_b_goals",
+    "winner",
+    "status",
+    "notes",
+]
 DEFAULT_RESULTS_API_URL = (
     "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/"
     "scoreboard?dates=20260611-20260719&limit=200"
@@ -167,8 +175,9 @@ def load_data():
     fixtures = pd.read_csv(DATA_DIR / "world_cup_2026_group_stage.csv")
     group_outcome = pd.read_csv(DATA_DIR / "world_cup_2026_group_outcome.csv")
     round_of_32 = pd.read_csv(DATA_DIR / "world_cup_2026_round_of_32.csv")
+    knockout_results = pd.read_csv(DATA_DIR / "world_cup_2026_knockout_results.csv")
     results, results_source = load_results(fixtures)
-    return matches, champions, teams_2026, fixtures, group_outcome, round_of_32, results, results_source
+    return matches, champions, teams_2026, fixtures, group_outcome, round_of_32, knockout_results, results, results_source
 
 
 def get_config_value(name, default=None):
@@ -896,6 +905,22 @@ def normalized_round_of_32(round_of_32):
     return knockout.dropna(subset=["match_id", "team_a", "team_b"])
 
 
+def normalized_knockout_results(knockout_results):
+    results = knockout_results.copy()
+    for column in KNOCKOUT_RESULTS_COLUMNS:
+        if column not in results.columns:
+            results[column] = np.nan
+
+    results = results[KNOCKOUT_RESULTS_COLUMNS]
+    results["match_id"] = pd.to_numeric(results["match_id"], errors="coerce").astype("Int64")
+    results["actual_team_a_goals"] = pd.to_numeric(results["actual_team_a_goals"], errors="coerce")
+    results["actual_team_b_goals"] = pd.to_numeric(results["actual_team_b_goals"], errors="coerce")
+    results["winner"] = results["winner"].map(normalize_team)
+    results["status"] = results["status"].fillna("pendente")
+    results["notes"] = results["notes"].fillna("")
+    return results.dropna(subset=["match_id"])
+
+
 ROUND_OF_32_TEMPLATE = [
     (73, ("2", "A"), ("2", "B")),
     (74, ("1", "E"), ("3", ["A", "B", "C", "D", "F"])),
@@ -970,8 +995,25 @@ def predicted_knockout_winner(team_a, team_b, ratings):
     return winner, winner_probability, score
 
 
-def build_knockout_projection(fixtures, ratings, results=None, group_outcome=None, round_of_32=None):
+def build_knockout_projection(
+    fixtures,
+    ratings,
+    results=None,
+    group_outcome=None,
+    round_of_32=None,
+    knockout_results=None,
+):
     round_of_32 = normalized_round_of_32(round_of_32) if round_of_32 is not None else pd.DataFrame()
+    knockout_results = (
+        normalized_knockout_results(knockout_results)
+        if knockout_results is not None
+        else pd.DataFrame(columns=KNOCKOUT_RESULTS_COLUMNS)
+    )
+    knockout_results_by_match = {
+        int(row["match_id"]): row
+        for _, row in knockout_results.iterrows()
+        if str(row["status"]).lower() in ["finalizado", "encerrado", "completed", "final"]
+    }
     uses_classified_list = not round_of_32.empty and group_outcome is not None
     actual_rankings, actual_positions, actual_thirds, complete, played_count = actual_group_positions(
         fixtures,
@@ -1000,7 +1042,22 @@ def build_knockout_projection(fixtures, ratings, results=None, group_outcome=Non
     rows = []
 
     def add_match(round_name, match_number, team_a, team_b, source_a, source_b):
-        winner, winner_probability, score = predicted_knockout_winner(team_a, team_b, ratings)
+        actual_result = knockout_results_by_match.get(match_number)
+        predicted_winner, winner_probability, predicted_score = predicted_knockout_winner(team_a, team_b, ratings)
+        if actual_result is not None and not pd.isna(actual_result["winner"]) and actual_result["winner"] != "":
+            winner = actual_result["winner"]
+            if not pd.isna(actual_result["actual_team_a_goals"]) and not pd.isna(actual_result["actual_team_b_goals"]):
+                score = f"{int(actual_result['actual_team_a_goals'])} x {int(actual_result['actual_team_b_goals'])}"
+            else:
+                score = "-"
+            probability_label = "Resultado real"
+            row_status = "Finalizado"
+        else:
+            winner = predicted_winner
+            score = predicted_score
+            probability_label = pct(winner_probability).replace(".", ",") if not pd.isna(winner_probability) else "-"
+            row_status = "Previsto"
+
         winners[match_number] = winner
         rows.append(
             {
@@ -1010,9 +1067,10 @@ def build_knockout_projection(fixtures, ratings, results=None, group_outcome=Non
                 "Origem A": source_a,
                 "Seleção B": team_label(team_b) if team_b != "A definir" else team_b,
                 "Origem B": source_b,
-                "Placar provável": score,
-                "Classificado previsto": team_label(winner) if winner != "A definir" else winner,
-                "Prob. de classificação": pct(winner_probability).replace(".", ",") if not pd.isna(winner_probability) else "-",
+                "Status": row_status,
+                "Placar": score,
+                "Classificado": team_label(winner) if winner != "A definir" else winner,
+                "Prob. de classificação": probability_label,
             }
         )
 
@@ -1045,6 +1103,7 @@ def build_knockout_projection(fixtures, ratings, results=None, group_outcome=Non
     metadata = {
         "uses_classified_list": uses_classified_list,
         "uses_actual_results": uses_actual_results,
+        "finished_knockout_matches": int(len(knockout_results_by_match)),
         "played_count": played_count,
         "total_count": int(len(fixtures)),
     }
@@ -1255,34 +1314,42 @@ def render_recent_results_page(matches, fixtures):
         st.dataframe(direct, use_container_width=True, hide_index=True)
 
 
-def render_knockout_page(fixtures, ratings, results=None, group_outcome=None, round_of_32=None):
+def render_knockout_page(
+    fixtures,
+    ratings,
+    results=None,
+    group_outcome=None,
+    round_of_32=None,
+    knockout_results=None,
+):
     rankings, qualified_thirds, bracket, metadata = build_knockout_projection(
         fixtures,
         ratings,
         results,
         group_outcome,
         round_of_32,
+        knockout_results,
     )
     uses_classified_teams = metadata["uses_classified_list"] or metadata["uses_actual_results"]
 
     st.title("Mata-mata com seleções classificadas" if uses_classified_teams else "Mata-mata projetado")
     if uses_classified_teams:
         st.write(
-            "A Fase de 32 usa as seleções classificadas da fase de grupos. A rede neural segue projetando os vencedores dos confrontos eliminatórios."
+            "A Fase de 32 usa as seleções classificadas da fase de grupos. Jogos já finalizados avançam o vencedor real; os demais seguem como previsão da rede neural."
         )
     else:
         st.write(
             "Ainda faltam resultados completos da fase de grupos; por enquanto, a chave usa a rede neural e as simulações de Monte Carlo para preencher a Fase de 32."
         )
 
-    champion = bracket.loc[bracket["Fase"] == "Final", "Classificado previsto"].iloc[0]
-    final_score = bracket.loc[bracket["Fase"] == "Final", "Placar provável"].iloc[0]
+    champion = bracket.loc[bracket["Fase"] == "Final", "Classificado"].iloc[0]
+    final_score = bracket.loc[bracket["Fase"] == "Final", "Placar"].iloc[0]
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         metric_card("Campeão projetado", champion)
     with c2:
-        metric_card("Placar provável da final", final_score)
+        metric_card("Placar da final", final_score)
     with c3:
         metric_card("Seleções no mata-mata", "32")
     with c4:
@@ -1343,8 +1410,9 @@ def render_knockout_page(fixtures, ratings, results=None, group_outcome=None, ro
                         "Origem A",
                         "Seleção B",
                         "Origem B",
-                        "Placar provável",
-                        "Classificado previsto",
+                        "Status",
+                        "Placar",
+                        "Classificado",
                         "Prob. de classificação",
                     ]
                 ],
@@ -1353,7 +1421,7 @@ def render_knockout_page(fixtures, ratings, results=None, group_outcome=None, ro
             )
 
     st.caption(
-        "A primeira rodada usa a lista de classificados quando ela está disponível; as fases seguintes continuam como previsão do modelo."
+        f"A chave usa resultados reais do mata-mata quando disponíveis ({metadata['finished_knockout_matches']} jogo(s) finalizado(s)); as partidas restantes continuam como previsão do modelo."
     )
 
 
@@ -2425,7 +2493,17 @@ def main():
     st.set_page_config(page_title="Copa dos Dados 2026", page_icon="WC", layout="wide")
     apply_theme()
 
-    matches, champions, teams_2026, fixtures, group_outcome, round_of_32, results, results_source = load_data()
+    (
+        matches,
+        champions,
+        teams_2026,
+        fixtures,
+        group_outcome,
+        round_of_32,
+        knockout_results,
+        results,
+        results_source,
+    ) = load_data()
     ratings = build_team_ratings(matches, champions, teams_2026)
     cover_uri = image_data_uri(ASSETS_DIR / "copa-dados-cover.png")
 
@@ -2455,7 +2533,7 @@ def main():
         return
 
     if selected_page == "Mata-mata":
-        render_knockout_page(fixtures, ratings, results, group_outcome, round_of_32)
+        render_knockout_page(fixtures, ratings, results, group_outcome, round_of_32, knockout_results)
         st.caption(
             "A estrutura considera o formato da Copa 2026 com 12 grupos, top 2 de cada grupo e os 8 melhores terceiros avançando ao mata-mata."
         )
