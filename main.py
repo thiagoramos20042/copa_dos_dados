@@ -1358,10 +1358,13 @@ def render_knockout_page(
     with c4:
         metric_card("Terceiros classificados", "8 de 12")
 
-    st.subheader("Classificação da fase de grupos" if uses_classified_teams else "Classificação projetada da fase de grupos")
+    st.subheader("Classificados da fase de grupos" if uses_classified_teams else "Classificação projetada da fase de grupos")
     group_summary = rankings.copy()
     group_summary["Seleção"] = group_summary["team"].map(team_label)
     if metadata["uses_classified_list"]:
+        group_summary = group_summary[
+            group_summary["Status"].str.contains("Classificado", case=False, na=False)
+        ].copy()
         st.dataframe(
             group_summary[["Grupo", "Posição", "Seleção", "Status"]],
             use_container_width=True,
