@@ -1052,11 +1052,13 @@ def build_knockout_projection(
                 score = "-"
             probability_label = "Resultado real"
             row_status = "Finalizado"
+            model_pick = team_label(predicted_winner) if predicted_winner != "A definir" else predicted_winner
         else:
-            winner = predicted_winner
+            winner = "A definir"
             score = predicted_score
             probability_label = pct(winner_probability).replace(".", ",") if not pd.isna(winner_probability) else "-"
-            row_status = "Previsto"
+            row_status = "Aguardando"
+            model_pick = team_label(predicted_winner) if predicted_winner != "A definir" else predicted_winner
 
         winners[match_number] = winner
         rows.append(
@@ -1070,6 +1072,7 @@ def build_knockout_projection(
                 "Status": row_status,
                 "Placar": score,
                 "Classificado": team_label(winner) if winner != "A definir" else winner,
+                "Palpite do modelo": model_pick,
                 "Prob. de classificação": probability_label,
             }
         )
@@ -1413,6 +1416,7 @@ def render_knockout_page(
                         "Status",
                         "Placar",
                         "Classificado",
+                        "Palpite do modelo",
                         "Prob. de classificação",
                     ]
                 ],
@@ -1421,7 +1425,7 @@ def render_knockout_page(
             )
 
     st.caption(
-        f"A chave usa resultados reais do mata-mata quando disponíveis ({metadata['finished_knockout_matches']} jogo(s) finalizado(s)); as partidas restantes continuam como previsão do modelo."
+        f"A chave usa classificados reais do mata-mata quando disponíveis ({metadata['finished_knockout_matches']} jogo(s) finalizado(s)); vagas de jogos pendentes ficam como A definir, com o palpite do modelo em coluna separada."
     )
 
 
