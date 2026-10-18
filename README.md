@@ -1,45 +1,47 @@
-# Copa dos Dados 2026
+# Copa dos Dados | Modelagem e simulação de jogos
 
-Aplicação Streamlit para analisar jogos da Copa do Mundo 2026 com base no histórico das Copas e na tabela atualizada da fase de grupos.
+Aplicação que combina histórico de Copas, previsão de gols e simulações para explorar partidas e classificação.
 
-## O que a app faz
+**Aplicações Python** · Aplicação Streamlit
 
-- Lista os 48 participantes e os 72 jogos da fase de grupos de 2026.
-- Treina uma rede neural MLP com os jogos históricos das Copas, usando apenas informações disponíveis antes de cada partida.
-- Estima os gols de cada seleção com a rede neural.
-- Executa 40 mil simulações de Monte Carlo por confronto para calcular probabilidades 1X2, placares e mercados de gols.
-- Executa 12 mil simulações por grupo para projetar pontos, saldo e probabilidade de classificação.
-- Calcula indicadores de gols: acima de 1,5 gol, acima de 2,5 gols, acima de 3,5 gols e ambos marcam.
-- Mostra os placares mais prováveis observados nas simulações de Monte Carlo.
-- Mostra bandeiras dos países e um card de palpite sugerido para bolão.
-- Projeta a classificação esperada do grupo com pontos, gols pró, gols contra e saldo.
-- Inclui a página `Confrontos diretos`, que mostra quando duas seleções já se enfrentaram em Copas, o placar e quem venceu.
-- Inclui a página `Mata-mata`, que projeta a chave da Fase de 32 até a final a partir da classificação estimada dos grupos.
-- Inclui a página `Estatísticas de acertos`, que compara os palpites estatísticos com os placares reais e calcula taxa de acerto.
+[← Portfólio de Thiago Oliveira](https://github.com/thiagoramos20042/thiagoramos20042) · [Catálogo de projetos](https://github.com/thiagoramos20042/thiagoramos20042/blob/main/PROJETOS.md)
 
-## Como executar
+## Objetivo
+
+Reunir dados históricos, modelos estatísticos e uma interface para comparar cenários da Copa de 2026.
+
+## O que você encontra
+
+- Modelo MLPRegressor para estimar gols a partir de atributos históricos.
+- Simulações de Monte Carlo para confrontos, grupos e mata-mata.
+- Páginas de confrontos diretos e comparação de previsões com resultados.
+
+## Tecnologias
+
+Python · Streamlit · pandas · NumPy · scikit-learn · CSV
+
+## Arquivos principais
+
+| Arquivo | Conteúdo |
+| --- | --- |
+| [main.py](main.py) | Aplicação e motor de modelagem/simulação. |
+| [data](data) | Dados da edição de 2026. |
+| [Jogos Copas do Mundo.csv](Jogos%20Copas%20do%20Mundo.csv) | Histórico de partidas. |
+| [copa_dos_dados.ipynb](copa_dos_dados.ipynb) | Estudo original da edição de 2022. |
+| [requirements.txt](requirements.txt) | Dependências da aplicação. |
+
+## Como explorar
+
+Na raiz do repositório:
 
 ```bash
-pip install -r requirements.txt
-streamlit run main.py
+python -m pip install -r requirements.txt
+python -m streamlit run main.py
 ```
 
-## Modelo de machine learning
+## Contexto do projeto
 
-O motor combina:
-
-- atributos históricos de ataque, defesa, pontos por jogo, aproveitamento e forma recente;
-- uma rede neural `MLPRegressor` com duas camadas ocultas;
-- validação temporal, treinando primeiro nos jogos mais antigos e avaliando nos mais recentes;
-- distribuição de Poisson alimentada pelos gols previstos pela rede;
-- simulação de Monte Carlo para resultados, mercados de gols, grupos e mata-mata.
-
-## Dados
-
-- `Jogos Copas do Mundo.csv`: histórico de partidas usado no rating.
-- `Campeoes.csv`: campeões e finalistas usados no rating.
-- `data/world_cup_2026_teams.csv`: seleções, grupos e confederações da Copa 2026.
-- `data/world_cup_2026_group_stage.csv`: calendário da fase de grupos 2026.
+As probabilidades são saídas de um modelo estatístico. Os dados locais permitem explorar a aplicação; a atualização de resultados utiliza a configuração de API descrita abaixo.
 
 ## Resultados via API
 
@@ -75,11 +77,6 @@ Formato recomendado:
 ]
 ```
 
-Referências usadas para a atualização de 2026:
+---
 
-- FIFA: calendário e sedes da Copa do Mundo 2026.
-- FIFA/Wikipedia: grupos, datas e formato da fase de grupos, consultados em maio de 2026.
-
-## Aviso
-
-Esta aplicação é uma ferramenta estatística para estudo. Ela não garante resultados e não deve ser tratada como recomendação financeira ou promessa de lucro.
+Integra o [portfólio de Thiago Oliveira](https://github.com/thiagoramos20042).
