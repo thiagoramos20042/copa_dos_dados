@@ -2,9 +2,9 @@
 
 Aplicação que combina histórico de Copas, previsão de gols e simulações para explorar partidas e classificação.
 
-**Aplicações Python** · Aplicação Streamlit
+**Data Science** · Aplicação Streamlit
 
-[← Portfólio de Thiago Oliveira](https://github.com/thiagoramos20042/thiagoramos20042) · [Catálogo de projetos](https://github.com/thiagoramos20042/thiagoramos20042/blob/main/PROJETOS.md)
+[← Data Science, IA e Automações · Thiago Oliveira](https://github.com/thiagoramos20042/thiagoramos20042) · [Catálogo de projetos](https://github.com/thiagoramos20042/thiagoramos20042/blob/main/PROJETOS.md)
 
 ## Objetivo
 
